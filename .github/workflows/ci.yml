@@ -18,10 +18,10 @@ concurrency:
 
 jobs:
   # ============================================================================
-  # Stage 1: Validate (Shell syntax, Docker Compose config, Anti-AI-Deception & Diff Filter)
+  # Stage 1: Validate (Lockfile Integrity, Shell/Compose Syntax, Diff Guard & Scope)
   # ============================================================================
   validate:
-    name: Validate & Diff Guard
+    name: Validate, Lockfiles & Diff Guard
     runs-on: ubuntu-latest
     outputs:
       backend_changed: ${{ steps.changes.outputs.backend_changed }}
@@ -38,8 +38,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Validate Shell Scripts & Docker Compose Configs
+      - name: Verify Fixed Lockfiles (root, backend, frontend)
+        run: node scripts/ci/check-lockfiles.mjs --report reports/lockfile-report.json
+
+      - name: Install Root Dependencies (Fixed Lockfile)
+        run: npm ci
+
+      - name: Validate Shell Scripts, CI Scripts & Docker Compose Configs
         run: bash scripts/ci/validate-configs.sh
 
       - name: Run Anti-AI-Deception & Diff Quality Guard
@@ -88,12 +96,12 @@ jobs:
 
           while IFS= read -r file; do
             case "$file" in
-              backend/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json)
+              backend/*|scripts/ci/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json|package-lock.json)
                 backend_changed="true"
                 ;;
             esac
             case "$file" in
-              frontend/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json)
+              frontend/*|scripts/ci/*|.github/workflows/ci.yml|.gitlab-ci.yml|package.json|package-lock.json)
                 frontend_changed="true"
                 ;;
             esac
@@ -111,17 +119,27 @@ jobs:
 
           echo "Scope Summary: is_integration=$is_integration | backend=$backend_changed | frontend=$frontend_changed | db=$db_changed"
 
+      - name: Upload Lockfile Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-lockfile
+          path: reports/lockfile-report.json
+          if-no-files-found: ignore
+
   # ============================================================================
-  # Stage 2a: Backend Test (Zero-Container — Node.js thuần siêu nhanh)
+  # Stage 2a: Backend Quality, Architecture, API Diff, Unit & Feature Tests
   # ============================================================================
   backend-test:
-    name: Backend Quality & Tests (Zero-Container)
+    name: Backend Quality, Arch, API Diff & Unit/Feature Tests
     needs: validate
     if: needs.validate.outputs.backend_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (with base history for OpenAPI diff)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -130,37 +148,61 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Install Backend Dependencies
+      - name: Install Backend Dependencies (Fixed Lockfile)
         working-directory: backend
         run: npm ci
 
-      - name: Check Formatting & ESLint
+      - name: Check Formatting (Prettier)
         working-directory: backend
-        run: |
-          npm run format:check
-          npx eslint "{src,test}/**/*.ts"
+        run: npm run format:check
 
-      - name: TypeScript Typecheck & Build (ESM + tsc-alias)
+      - name: Check Code Quality (ESLint)
         working-directory: backend
-        run: |
-          npm run typecheck
-          npm run build
+        run: npm run lint:check
 
-      - name: Architecture Boundary & OpenAPI Contract Gate (Offline)
+      - name: TypeScript Type Check
         working-directory: backend
-        run: |
-          npm run arch:check
-          npm run openapi:check
+        run: npm run typecheck
 
-      - name: Run Unit, Integration & Feature Tests with Module Coverage
+      - name: Build Backend (ESM + tsc-alias)
+        working-directory: backend
+        run: npm run build
+
+      - name: Run Architecture Boundary Tests (arch:check)
+        working-directory: backend
+        run: npm run cli -- arch:check --report ../reports/arch-report.json
+
+      - name: Check API Breaking Changes against Base OpenAPI
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/ci/check-api-changes.mjs --report reports/openapi-report.json
+
+      - name: Run Unit Tests
+        working-directory: backend
+        run: npm run test:unit
+
+      - name: Run Feature/API Tests & Module Coverage Report
         working-directory: backend
         run: npm run test:cov:module
 
+      - name: Upload Backend Quality Reports & Coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-report-backend
+          path: |
+            reports/arch-report.json
+            reports/openapi-report.json
+            backend/coverage/module-coverage-summary.json
+            backend/coverage/module-coverage-report.md
+          if-no-files-found: ignore
+
   # ============================================================================
-  # Stage 2b: Frontend Test (Zero-Container — Oxlint + Hardcode Gate + Vitest + Build)
+  # Stage 2b: Frontend Basic Quality (Lockfile, Lint, Typecheck, Vitest, Build)
   # ============================================================================
   frontend-test:
-    name: Frontend Quality, Vitest & Build
+    name: Frontend Quality, Typecheck, Vitest & Build
     needs: validate
     if: needs.validate.outputs.frontend_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
     runs-on: ubuntu-latest
@@ -175,13 +217,17 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Frontend Dependencies
+      - name: Install Frontend Dependencies (Fixed Lockfile)
         working-directory: frontend
         run: npm ci
 
       - name: Run Oxlint & Hardcode Gate (Theme / i18n)
         working-directory: frontend
         run: npm run lint
+
+      - name: TypeScript Type Check
+        working-directory: frontend
+        run: npm run typecheck
 
       - name: Run Vitest Suite
         working-directory: frontend
@@ -192,12 +238,12 @@ jobs:
         run: npm run build
 
   # ============================================================================
-  # Stage 2c: Database Migration & Idempotent Seeder Test (Chỉ bật khi sửa DB/Manifest hoặc nhánh tích hợp)
+  # Stage 2c: Backend Integration & API Tests with Real PostgreSQL + Redis
   # ============================================================================
-  db-migration-seed-test:
-    name: Database Migration & Seeder Gate (Ephemeral Postgres + Redis)
+  backend-integration-api-test:
+    name: Backend Integration & API Tests (Postgres 16 + Redis 7)
     needs: validate
-    if: needs.validate.outputs.db_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
+    if: needs.validate.outputs.backend_changed == 'true' || needs.validate.outputs.db_changed == 'true' || needs.validate.outputs.is_integration_ref == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -252,7 +298,7 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
-      - name: Install & Build Backend
+      - name: Install & Build Backend (Fixed Lockfile)
         working-directory: backend
         run: |
           npm ci
@@ -270,6 +316,13 @@ jobs:
         working-directory: backend
         run: npm run cli -- seed:run
 
+      - name: Run Live Integration & API Tests (Real DB + Redis)
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          OPS_DATABASE_MIGRATIONS_ENABLED: 'false'
+        run: npm run test:integration:live
+
   # ============================================================================
   # Stage 3: Docker Multi-Runtime Smoke Test (Chỉ chạy trên nhánh tích hợp develop/main/release)
   # ============================================================================
@@ -279,13 +332,13 @@ jobs:
       - validate
       - backend-test
       - frontend-test
-      - db-migration-seed-test
+      - backend-integration-api-test
     if: |
       always() &&
       needs.validate.outputs.is_integration_ref == 'true' &&
       (needs.backend-test.result == 'success' || needs.backend-test.result == 'skipped') &&
       (needs.frontend-test.result == 'success' || needs.frontend-test.result == 'skipped') &&
-      (needs.db-migration-seed-test.result == 'success' || needs.db-migration-seed-test.result == 'skipped')
+      (needs.backend-integration-api-test.result == 'success' || needs.backend-integration-api-test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -306,3 +359,54 @@ jobs:
           docker compose -f docker-compose.prod.yml logs --tail=50 || true
           docker compose -f docker-compose.prod.yml down -v --remove-orphans || true
 
+  # ============================================================================
+  # Stage 4: Aggregated CI Quality Report (Step Summary + Downloadable Artifact)
+  # ============================================================================
+  ci-report:
+    name: CI Quality Summary Report
+    needs:
+      - validate
+      - backend-test
+      - frontend-test
+      - backend-integration-api-test
+      - docker-smoke-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download Quality Report Artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: downloaded-reports
+
+      - name: Generate CI Summary & Write GitHub Step Summary
+        run: |
+          node scripts/ci/ci-report.mjs --summarize --no-fail \
+            --step "Validate, Lockfiles & Diff Guard=${{ needs.validate.result }}" \
+            --step "Backend Quality, Arch, API Diff & Unit/Feature Tests=${{ needs.backend-test.result }}" \
+            --step "Backend Integration & API Tests (Postgres + Redis)=${{ needs.backend-integration-api-test.result }}" \
+            --step "Frontend Quality, Typecheck & Build=${{ needs.frontend-test.result }}" \
+            --step "Docker Multi-Runtime Smoke Test=${{ needs.docker-smoke-test.result }}" \
+            --lockfile-report downloaded-reports/ci-report-lockfile/lockfile-report.json \
+            --arch-report downloaded-reports/ci-report-backend/reports/arch-report.json \
+            --openapi-report downloaded-reports/ci-report-backend/reports/openapi-report.json \
+            --coverage-report downloaded-reports/ci-report-backend/backend/coverage/module-coverage-summary.json \
+            --out-dir reports
+
+      - name: Upload Aggregated CI Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-summary-report
+          path: |
+            reports/ci-summary.md
+            reports/ci-summary.json
+          if-no-files-found: ignore

@@ -1,4 +1,8 @@
 import { describe, it, expect } from '@jest/globals';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import { join } from 'node:path';
+import { ArchitectureCommand } from '../../../src/apps/cli/commands/architecture/architecture.command.js';
 import { ArchitectureLinterService } from '../../../src/apps/cli/services/architecture-linter.service.js';
 import { ManifestService } from '../../../src/apps/cli/services/manifest.service.js';
 
@@ -31,5 +35,25 @@ describe('ArchitectureLinterService', () => {
     );
     expect(rule9Violations).toHaveLength(0);
     expect(report.passed).toBe(true);
+  });
+
+  /** Kiểm thử xuất báo cáo JSON của arch:check phục vụ tổng hợp CI Report */
+  it('writes JSON report when ArchitectureCommand runs with --report', async () => {
+    const command = new ArchitectureCommand(linter, manifestService);
+    const reportPath = join(os.tmpdir(), `core-arch-report-${Date.now()}.json`);
+    try {
+      await expect(command.checkArchitecture(['--report', reportPath])).resolves.toBeUndefined();
+      expect(existsSync(reportPath)).toBe(true);
+      const parsed = JSON.parse(readFileSync(reportPath, 'utf8')) as {
+        passed: boolean;
+        totalFilesScanned: number;
+        violationCount: number;
+      };
+      expect(parsed.passed).toBe(true);
+      expect(parsed.totalFilesScanned).toBeGreaterThan(10);
+      expect(parsed.violationCount).toBe(0);
+    } finally {
+      rmSync(reportPath, { force: true });
+    }
   });
 });

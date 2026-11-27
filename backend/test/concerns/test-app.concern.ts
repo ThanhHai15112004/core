@@ -24,6 +24,8 @@ export interface CreateTestAppOptions {
   readonly useGlobalPrefix?: boolean;
   /** Đăng ký các route tài liệu API (`/docs`, `/docs/openapi.json`, `/docs/postman.json`). */
   readonly enableApiDocs?: boolean;
+  /** Sử dụng kết nối Redis thật thay vì `ioredis-mock` (chỉ dùng cho live integration test trên CI/Docker). */
+  readonly useRealRedis?: boolean;
   /** Cho phép đăng ký thêm Controller phục vụ E2E test chuyên biệt (vd: RBAC test controller). */
   readonly extraControllers?: NonNullable<ModuleMetadata['controllers']>;
   /** Cho phép đăng ký thêm Provider phục vụ Integration/E2E test. */
@@ -97,14 +99,17 @@ export async function injectJson<T = unknown>(
  * Tương đương với các test concerns / traits trong kiến trúc coaching.
  */
 export async function createTestApp(options?: CreateTestAppOptions): Promise<TestAppContext> {
-  const moduleFixture: TestingModule = await Test.createTestingModule({
+  const builder = Test.createTestingModule({
     imports: [ApiModule],
     ...(options?.extraControllers ? { controllers: options.extraControllers } : {}),
     ...(options?.extraProviders ? { providers: options.extraProviders } : {}),
-  })
-    .overrideProvider(REDIS_CLIENT_FACTORY)
-    .useValue(mockRedisFactory)
-    .compile();
+  });
+
+  if (!options?.useRealRedis) {
+    builder.overrideProvider(REDIS_CLIENT_FACTORY).useValue(mockRedisFactory);
+  }
+
+  const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication<NestFastifyApplication>(
     new FastifyAdapter({ logger: false }),

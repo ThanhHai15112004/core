@@ -1,7 +1,9 @@
 import {
   BREAKING_CHANGE_RULES,
+  NON_BREAKING_CHANGE_RULES,
   type BreakingChangeIssue,
   type BreakingChangeReport,
+  type NonBreakingChangeIssue,
   type OpenApiDocument,
   type OpenApiOperationObject,
   type OpenApiSchemaObject,
@@ -42,6 +44,7 @@ export function detectOpenApiBreakingChanges(
   current: OpenApiDocument,
 ): BreakingChangeReport {
   const issues: BreakingChangeIssue[] = [];
+  const nonBreaking: NonBreakingChangeIssue[] = [];
   let totalOperationsCompared = 0;
 
   for (const [pathKey, basePathItem] of Object.entries(baseline.paths)) {
@@ -83,16 +86,39 @@ export function detectOpenApiBreakingChanges(
       }
 
       // 2. Kiểm tra siết chặt bảo mật (Security / Permissions / Roles)
-      compareSecurityConstraints(pathKey, method.toUpperCase(), baseOp, currOp, issues);
+      compareSecurityConstraints(
+        pathKey,
+        method.toUpperCase(),
+        baseOp,
+        currOp,
+        issues,
+        nonBreaking,
+      );
 
       // 3. Kiểm tra Query & Path Parameters
-      compareParameters(pathKey, method.toUpperCase(), baseOp, currOp, issues);
+      compareParameters(pathKey, method.toUpperCase(), baseOp, currOp, issues, nonBreaking);
 
       // 4. Kiểm tra Request Body Schema
-      compareRequestBody(pathKey, method.toUpperCase(), baseOp, currOp, issues);
+      compareRequestBody(pathKey, method.toUpperCase(), baseOp, currOp, issues, nonBreaking);
 
       // 5. Kiểm tra Response 2xx Schema
-      compareSuccessResponses(pathKey, method.toUpperCase(), baseOp, currOp, issues);
+      compareSuccessResponses(pathKey, method.toUpperCase(), baseOp, currOp, issues, nonBreaking);
+    }
+  }
+
+  // 6. Phát hiện các endpoint/method mới được bổ sung (Non-breaking / Additive)
+  for (const [pathKey, currPathItem] of Object.entries(current.paths)) {
+    const basePathItem = baseline.paths[pathKey];
+    for (const method of HTTP_METHODS) {
+      if (currPathItem[method] && !basePathItem?.[method]) {
+        nonBreaking.push({
+          rule: NON_BREAKING_CHANGE_RULES.ENDPOINT_ADDED,
+          severity: 'INFO',
+          path: pathKey,
+          method: method.toUpperCase(),
+          message: `New HTTP operation [${method.toUpperCase()} ${pathKey}] was added.`,
+        });
+      }
     }
   }
 
@@ -100,6 +126,7 @@ export function detectOpenApiBreakingChanges(
     passed: issues.length === 0,
     totalOperationsCompared,
     breakingChanges: issues,
+    nonBreakingChanges: nonBreaking,
   };
 }
 
@@ -110,6 +137,7 @@ function compareSecurityConstraints(
   baseOp: OpenApiOperationObject,
   currOp: OpenApiOperationObject,
   issues: BreakingChangeIssue[],
+  nonBreaking: NonBreakingChangeIssue[],
 ): void {
   const wasPublic = baseOp['x-public'] === true || baseOp.security.length === 0;
   const isNowPublic = currOp['x-public'] === true || currOp.security.length === 0;
@@ -121,6 +149,14 @@ function compareSecurityConstraints(
       path: pathKey,
       method,
       message: `Endpoint [${method} ${pathKey}] changed from Public to Authenticated (Bearer JWT required).`,
+    });
+  } else if (!wasPublic && isNowPublic) {
+    nonBreaking.push({
+      rule: NON_BREAKING_CHANGE_RULES.SECURITY_RELAXED,
+      severity: 'INFO',
+      path: pathKey,
+      method,
+      message: `Endpoint [${method} ${pathKey}] changed from Authenticated to Public.`,
     });
   }
 
@@ -162,6 +198,7 @@ function compareParameters(
   baseOp: OpenApiOperationObject,
   currOp: OpenApiOperationObject,
   issues: BreakingChangeIssue[],
+  nonBreaking: NonBreakingChangeIssue[],
 ): void {
   const baseParams = new Map((baseOp.parameters ?? []).map((p) => [`${p.in}:${p.name}`, p]));
   const currParams = new Map((currOp.parameters ?? []).map((p) => [`${p.in}:${p.name}`, p]));
@@ -177,6 +214,18 @@ function compareParameters(
         method,
         field: currParam.name,
         message: `New required ${currParam.in} parameter "${currParam.name}" was added to [${method} ${pathKey}].`,
+      });
+      continue;
+    }
+
+    if (!baseParam && !currParam.required) {
+      nonBreaking.push({
+        rule: NON_BREAKING_CHANGE_RULES.OPTIONAL_PARAM_ADDED,
+        severity: 'INFO',
+        path: pathKey,
+        method,
+        field: currParam.name,
+        message: `Optional ${currParam.in} parameter "${currParam.name}" was added to [${method} ${pathKey}].`,
       });
       continue;
     }
@@ -233,6 +282,7 @@ function compareRequestBody(
   baseOp: OpenApiOperationObject,
   currOp: OpenApiOperationObject,
   issues: BreakingChangeIssue[],
+  nonBreaking: NonBreakingChangeIssue[],
 ): void {
   const baseBodySchema = baseOp.requestBody?.content['application/json']?.schema;
   const currBodySchema = currOp.requestBody?.content['application/json']?.schema;
@@ -267,6 +317,20 @@ function compareRequestBody(
         method,
         field: reqField,
         message: `Request body field "${reqField}" became required in [${method} ${pathKey}].`,
+      });
+    }
+  }
+
+  // Trường optional mới thêm vào Request Body (Non-breaking)
+  for (const fieldName of Object.keys(currProps)) {
+    if (!(fieldName in baseProps) && !currRequired.has(fieldName)) {
+      nonBreaking.push({
+        rule: NON_BREAKING_CHANGE_RULES.OPTIONAL_BODY_FIELD_ADDED,
+        severity: 'INFO',
+        path: pathKey,
+        method,
+        field: fieldName,
+        message: `Optional request body field "${fieldName}" was added to [${method} ${pathKey}].`,
       });
     }
   }
@@ -308,6 +372,7 @@ function compareSuccessResponses(
   baseOp: OpenApiOperationObject,
   currOp: OpenApiOperationObject,
   issues: BreakingChangeIssue[],
+  nonBreaking: NonBreakingChangeIssue[],
 ): void {
   const baseSuccessStatus = Object.keys(baseOp.responses).find((code) => code.startsWith('2'));
   if (!baseSuccessStatus) return;
@@ -335,7 +400,15 @@ function compareSuccessResponses(
 
   if (!baseDataSchema || !currDataSchema) return;
 
-  compareResponseSchemaRecursive(pathKey, method, 'data', baseDataSchema, currDataSchema, issues);
+  compareResponseSchemaRecursive(
+    pathKey,
+    method,
+    'data',
+    baseDataSchema,
+    currDataSchema,
+    issues,
+    nonBreaking,
+  );
 }
 
 /** So sánh đệ quy cấu trúc `data` trong Response để phát hiện trường bị xóa hoặc đổi kiểu */
@@ -346,6 +419,7 @@ function compareResponseSchemaRecursive(
   baseSchema: OpenApiSchemaObject,
   currSchema: OpenApiSchemaObject,
   issues: BreakingChangeIssue[],
+  nonBreaking: NonBreakingChangeIssue[],
 ): void {
   const baseType = normalizeSchemaType(baseSchema);
   const currType = normalizeSchemaType(currSchema);
@@ -370,6 +444,7 @@ function compareResponseSchemaRecursive(
       baseSchema.items,
       currSchema.items,
       issues,
+      nonBreaking,
     );
     return;
   }
@@ -399,6 +474,21 @@ function compareResponseSchemaRecursive(
       basePropSchema,
       currPropSchema,
       issues,
+      nonBreaking,
     );
+  }
+
+  for (const propName of Object.keys(currProps)) {
+    if (!(propName in baseProps)) {
+      const nextPath = `${fieldPath}.${propName}`;
+      nonBreaking.push({
+        rule: NON_BREAKING_CHANGE_RULES.RESPONSE_FIELD_ADDED,
+        severity: 'INFO',
+        path: pathKey,
+        method,
+        field: nextPath,
+        message: `Response field "${nextPath}" was added to [${method} ${pathKey}].`,
+      });
+    }
   }
 }

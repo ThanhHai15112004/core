@@ -210,9 +210,29 @@ export const BREAKING_CHANGE_RULES = {
 
 export type BreakingChangeRule = (typeof BREAKING_CHANGE_RULES)[keyof typeof BREAKING_CHANGE_RULES];
 
+export const NON_BREAKING_CHANGE_RULES = {
+  ENDPOINT_ADDED: 'ENDPOINT_ADDED',
+  OPTIONAL_PARAM_ADDED: 'OPTIONAL_PARAM_ADDED',
+  OPTIONAL_BODY_FIELD_ADDED: 'OPTIONAL_BODY_FIELD_ADDED',
+  RESPONSE_FIELD_ADDED: 'RESPONSE_FIELD_ADDED',
+  SECURITY_RELAXED: 'SECURITY_RELAXED',
+} as const;
+
+export type NonBreakingChangeRule =
+  (typeof NON_BREAKING_CHANGE_RULES)[keyof typeof NON_BREAKING_CHANGE_RULES];
+
 export interface BreakingChangeIssue {
   readonly rule: BreakingChangeRule;
   readonly severity: 'BREAKING';
+  readonly path: string;
+  readonly method: string;
+  readonly field?: string;
+  readonly message: string;
+}
+
+export interface NonBreakingChangeIssue {
+  readonly rule: NonBreakingChangeRule;
+  readonly severity: 'INFO';
   readonly path: string;
   readonly method: string;
   readonly field?: string;
@@ -223,4 +243,5 @@ export interface BreakingChangeReport {
   readonly passed: boolean;
   readonly totalOperationsCompared: number;
   readonly breakingChanges: readonly BreakingChangeIssue[];
+  readonly nonBreakingChanges: readonly NonBreakingChangeIssue[];
 }

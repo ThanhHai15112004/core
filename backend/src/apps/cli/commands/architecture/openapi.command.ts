@@ -33,7 +33,8 @@ export class OpenApiCommand implements ICliCommandProvider {
         domain: 'Architecture',
         description:
           'Kiểm tra thay đổi phá vỡ hợp đồng API (Breaking Changes) so với bản baseline OpenAPI',
-        usage: 'npm run cli -- openapi:check [--base openapi/openapi.v1.json]',
+        usage:
+          'npm run cli -- openapi:check [--base openapi/openapi.v1.json] [--report path/to/openapi-report.json]',
         execute: (args: string[]) => this.checkBreakingChanges(args),
       },
     ];
@@ -72,6 +73,7 @@ export class OpenApiCommand implements ICliCommandProvider {
   public async checkBreakingChanges(args: string[] = []): Promise<void> {
     const backendRoot = this.manifestService.getBackendRoot();
     const baseArg = this.extractFlagValue(args, '--base') ?? DEFAULT_OPENAPI_REL_PATH;
+    const reportArg = this.extractFlagValue(args, '--report');
     const baselinePath = path.isAbsolute(baseArg) ? baseArg : path.join(backendRoot, baseArg);
 
     console.log('\n======================================================');
@@ -91,7 +93,36 @@ export class OpenApiCommand implements ICliCommandProvider {
     const { openApiDocument: currentSpec } = generateCoreApiDocs();
     const report = detectOpenApiBreakingChanges(baselineSpec, currentSpec);
 
-    console.log(`Compared ${report.totalOperationsCompared} baseline HTTP operation(s).\n`);
+    if (reportArg) {
+      const reportPath = path.isAbsolute(reportArg) ? reportArg : path.join(backendRoot, reportArg);
+      await fs.mkdir(path.dirname(reportPath), { recursive: true });
+      await fs.writeFile(
+        reportPath,
+        `${JSON.stringify(
+          {
+            generatedAt: new Date().toISOString(),
+            passed: report.passed,
+            baselinePath: path.relative(backendRoot, baselinePath),
+            totalOperationsCompared: report.totalOperationsCompared,
+            breakingCount: report.breakingChanges.length,
+            nonBreakingCount: report.nonBreakingChanges.length,
+            breakingChanges: report.breakingChanges,
+            nonBreakingChanges: report.nonBreakingChanges,
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+    }
+
+    console.log(`Compared ${report.totalOperationsCompared} baseline HTTP operation(s).`);
+    if (report.nonBreakingChanges.length > 0) {
+      console.log(
+        `Detected ${report.nonBreakingChanges.length} non-breaking/additive API change(s).`,
+      );
+    }
+    console.log('');
 
     if (report.passed) {
       console.log('------------------------------------------------------');

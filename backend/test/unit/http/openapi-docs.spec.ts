@@ -1,6 +1,7 @@
 import { describe, it, expect, jest } from '@jest/globals';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   Controller,
   Delete,
@@ -21,6 +22,7 @@ import {
   ApiDoc,
   ApiGroup,
   BREAKING_CHANGE_RULES,
+  NON_BREAKING_CHANGE_RULES,
   OPENAPI_VERSION,
   Public,
   RequirePermissions,
@@ -260,6 +262,15 @@ describe('Unit: Scalar UI, OpenAPI 3.1 & Breaking Change Detector (Task 2.3)', (
       const report = detectOpenApiBreakingChanges(baseline, current);
       expect(report.passed).toBe(true);
       expect(report.breakingChanges).toHaveLength(0);
+      expect(report.nonBreakingChanges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            rule: NON_BREAKING_CHANGE_RULES.OPTIONAL_PARAM_ADDED,
+            severity: 'INFO',
+            field: 'search',
+          }),
+        ]),
+      );
     });
 
     it('should detect all 7 categories of breaking API changes accurately', () => {
@@ -326,7 +337,23 @@ describe('Unit: Scalar UI, OpenAPI 3.1 & Breaking Change Detector (Task 2.3)', (
       expect(existsSync(openApiPath)).toBe(true);
       expect(existsSync(postmanPath)).toBe(true);
 
-      await expect(command.checkBreakingChanges([])).resolves.toBeUndefined();
+      const reportPath = join(os.tmpdir(), `core-openapi-report-${Date.now()}.json`);
+      try {
+        await expect(
+          command.checkBreakingChanges(['--report', reportPath]),
+        ).resolves.toBeUndefined();
+        expect(existsSync(reportPath)).toBe(true);
+        const saved = JSON.parse(readFileSync(reportPath, 'utf8')) as {
+          passed: boolean;
+          breakingCount: number;
+          nonBreakingCount: number;
+        };
+        expect(saved.passed).toBe(true);
+        expect(saved.breakingCount).toBe(0);
+        expect(typeof saved.nonBreakingCount).toBe('number');
+      } finally {
+        rmSync(reportPath, { force: true });
+      }
 
       const linter = new ArchitectureLinterService(manifestService);
       const report = await linter.check();

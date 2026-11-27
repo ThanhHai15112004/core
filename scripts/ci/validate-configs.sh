@@ -24,6 +24,22 @@ for script in "${SHELL_SCRIPTS[@]}"; do
   fi
 done
 
+if command -v node >/dev/null 2>&1; then
+  echo "🔍 [validate-configs] 1b. Kiểm tra cú pháp các tệp CI Node scripts (node --check)..."
+  CI_NODE_SCRIPTS=(
+    "scripts/ci/guard-diff.mjs"
+    "scripts/ci/check-lockfiles.mjs"
+    "scripts/ci/check-api-changes.mjs"
+    "scripts/ci/ci-report.mjs"
+  )
+  for node_script in "${CI_NODE_SCRIPTS[@]}"; do
+    if [ -f "$node_script" ]; then
+      node --check "$node_script"
+      echo "  ✓ $node_script: OK"
+    fi
+  done
+fi
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   echo "🔍 [validate-configs] 2. Kiểm tra tính hợp lệ của các tệp Docker Compose..."
 

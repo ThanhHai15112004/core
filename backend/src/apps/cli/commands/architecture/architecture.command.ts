@@ -1,5 +1,8 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ArchitectureLinterService } from '../../services/architecture-linter.service.js';
+import { ManifestService } from '../../services/manifest.service.js';
 import {
   type CliCommandDescriptor,
   type ICliCommandProvider,
@@ -7,7 +10,10 @@ import {
 
 @Injectable()
 export class ArchitectureCommand implements ICliCommandProvider {
-  constructor(private readonly linter: ArchitectureLinterService) {}
+  constructor(
+    private readonly linter: ArchitectureLinterService,
+    private readonly manifestService?: ManifestService,
+  ) {}
 
   /** Khai báo danh mục các lệnh kiểm tra kiến trúc hệ thống */
   public getCommands(): CliCommandDescriptor[] {
@@ -16,27 +22,49 @@ export class ArchitectureCommand implements ICliCommandProvider {
         name: 'arch:check',
         domain: 'Architecture',
         description: 'Kiểm tra tuân thủ quy tắc kiến trúc Modular Monolith và ranh giới module',
-        usage: 'npm run cli -- arch:check',
-        execute: () => this.checkArchitecture(),
+        usage: 'npm run cli -- arch:check [--report path/to/arch-report.json]',
+        execute: (args: string[]) => this.checkArchitecture(args),
       },
       {
         name: 'architecture:check',
         domain: 'Architecture',
         description: 'Alias cho arch:check',
-        usage: 'npm run cli -- architecture:check',
-        execute: () => this.checkArchitecture(),
+        usage: 'npm run cli -- architecture:check [--report path/to/arch-report.json]',
+        execute: (args: string[]) => this.checkArchitecture(args),
       },
     ];
   }
 
   /** Thực thi kiểm tra các quy tắc kiến trúc và in báo cáo vi phạm */
-  public async checkArchitecture(): Promise<void> {
+  public async checkArchitecture(args: string[] = []): Promise<void> {
     console.log('\n======================================================');
     console.log('       Core Architecture & Boundary Validator         ');
     console.log('======================================================\n');
     console.log('Scanning codebase for architectural rule violations...');
 
     const report = await this.linter.check();
+    const reportArg = this.extractFlagValue(args, '--report');
+
+    if (reportArg) {
+      const baseRoot = this.manifestService?.getBackendRoot() ?? process.cwd();
+      const reportPath = path.isAbsolute(reportArg) ? reportArg : path.join(baseRoot, reportArg);
+      await fs.mkdir(path.dirname(reportPath), { recursive: true });
+      await fs.writeFile(
+        reportPath,
+        `${JSON.stringify(
+          {
+            generatedAt: new Date().toISOString(),
+            passed: report.passed,
+            totalFilesScanned: report.totalFilesScanned,
+            violationCount: report.violations.length,
+            violations: report.violations,
+          },
+          null,
+          2,
+        )}\n`,
+        'utf8',
+      );
+    }
 
     console.log(`\nScanned ${report.totalFilesScanned} source files in backend/src/\n`);
 
@@ -71,5 +99,13 @@ export class ArchitectureCommand implements ICliCommandProvider {
       'Failed! Please fix the architectural violations listed above before proceeding.\n',
     );
     throw new Error(`Architecture validation failed with ${report.violations.length} violations.`);
+  }
+
+  private extractFlagValue(args: string[], flagName: string): string | undefined {
+    const idx = args.indexOf(flagName);
+    if (idx >= 0 && idx + 1 < args.length) {
+      return args[idx + 1];
+    }
+    return undefined;
   }
 }
