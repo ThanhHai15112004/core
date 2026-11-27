@@ -236,11 +236,22 @@ docker-smoke-test:
   script:
     - cp .env.docker.prod.example .env.docker.prod
     - sed -i 's/^DB_ENABLED=.*/DB_ENABLED=false/' .env.docker.prod
-    - docker compose -f docker-compose.prod.yml up -d --build
+    - sed -i 's/^REDIS_HOST=.*/REDIS_HOST=redis/' .env.docker.prod
+    - sed -i 's/^REDIS_PASSWORD=.*/REDIS_PASSWORD=/' .env.docker.prod
+    - |
+      cat <<'EOF' > /tmp/ci-smoke-redis.yml
+      services:
+        redis:
+          image: redis:7-alpine
+          container_name: core-redis-ci-smoke
+          networks:
+            - core_prod_net
+      EOF
+    - docker compose -f docker-compose.prod.yml -f /tmp/ci-smoke-redis.yml up -d --build
     - bash ./docker/smoke-test.sh prod
   after_script:
-    - docker compose -f docker-compose.prod.yml down -v --remove-orphans >/dev/null 2>&1 || true
-    - rm -f .env.docker.prod
+    - docker compose -f docker-compose.prod.yml -f /tmp/ci-smoke-redis.yml down -v --remove-orphans >/dev/null 2>&1 || true
+    - rm -f /tmp/ci-smoke-redis.yml .env.docker.prod
 
 # ==============================================================================
 # Stage 4: Aggregated CI Quality Report
