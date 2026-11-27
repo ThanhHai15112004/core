@@ -4,6 +4,7 @@ import type { Job } from 'bullmq';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   BACKUP_QUEUE_TOPICS,
+  DATA_GOVERNANCE_QUEUE_TOPICS,
   DR_QUEUE_TOPICS,
   DomainEventBusService,
   ExportRegistryService,
@@ -63,6 +64,10 @@ import {
   PRIVILEGED_ACCESS_PUBLIC_SERVICE,
   type IPrivilegedAccessPublicService,
 } from '@modules/privileged-access/contracts/index.js';
+import {
+  DATA_GOVERNANCE_PUBLIC_SERVICE,
+  type IDataGovernancePublicService,
+} from '@modules/data-governance/contracts/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 export interface SystemMaintenanceTickPayload {
@@ -118,6 +123,9 @@ export class SystemProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(PRIVILEGED_ACCESS_PUBLIC_SERVICE)
     private readonly privilegedAccessService?: IPrivilegedAccessPublicService,
+    @Optional()
+    @Inject(DATA_GOVERNANCE_PUBLIC_SERVICE)
+    private readonly dataGovernanceService?: IDataGovernancePublicService,
   ) {
     super(config, metrics, progressTracker);
   }
@@ -295,6 +303,20 @@ export class SystemProcessor extends BaseQueueProcessor {
         return { handled: false, skipped: true, reason: 'privileged_access_service_unavailable' };
       }
       return this.privilegedAccessService.runScheduledReviewCheck();
+    }
+
+    if (envelope.topic === DATA_GOVERNANCE_QUEUE_TOPICS.RETENTION_SWEEP_TICK) {
+      if (!this.dataGovernanceService) {
+        return { handled: false, skipped: true, reason: 'data_governance_service_unavailable' };
+      }
+      return this.dataGovernanceService.runRetentionSweep();
+    }
+
+    if (envelope.topic === DATA_GOVERNANCE_QUEUE_TOPICS.GOVERNANCE_EXPIRATION_TICK) {
+      if (!this.dataGovernanceService) {
+        return { handled: false, skipped: true, reason: 'data_governance_service_unavailable' };
+      }
+      return this.dataGovernanceService.runExpirationSweep();
     }
 
     if (

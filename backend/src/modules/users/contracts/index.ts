@@ -320,6 +320,11 @@ export interface IUsersPublicService {
     actorId?: number,
   ): Promise<ProvisionedUserView>;
   activateProvisionedUser?(userId: number, actorId?: number): Promise<ProvisionedUserView>;
+  anonymizePersonalData?(
+    userId: number,
+    reason?: string | null,
+    actorId?: number,
+  ): Promise<{ readonly anonymized: boolean; readonly fieldsCleared: readonly string[] }>;
 }
 
 export const USERS_PUBLIC_SERVICE = Symbol('USERS_PUBLIC_SERVICE');

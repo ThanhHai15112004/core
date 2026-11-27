@@ -1,0 +1,20 @@
+{
+  "moduleDisabled": "Mô-đun Quyền riêng tư & Quản trị dữ liệu hiện đang tắt theo cấu hình dự án.",
+  "dsarDisabled": "Chức năng yêu cầu dữ liệu cá nhân (DSAR) hiện đang tắt.",
+  "consentDisabled": "Chức năng quản lý sự đồng ý (Consent) hiện đang tắt.",
+  "legalHoldDisabled": "Chức năng tạm giữ dữ liệu pháp lý (Legal Hold) hiện đang tắt.",
+  "classificationNotFound": "Không tìm thấy phân loại dữ liệu yêu cầu.",
+  "sensitiveFieldNotFound": "Không tìm thấy cấu hình trường dữ liệu nhạy cảm.",
+  "dsarNotFound": "Không tìm thấy yêu cầu dữ liệu cá nhân (DSAR).",
+  "dsarInvalidStatus": "Trạng thái yêu cầu dữ liệu cá nhân không hợp lệ cho thao tác này.",
+  "dsarSelfApprovalForbidden": "Người tạo yêu cầu xóa dữ liệu không được tự phê duyệt yêu cầu của chính mình.",
+  "dsarForbiddenAccess": "Bạn không có quyền xem hoặc thao tác trên yêu cầu dữ liệu của người dùng khác.",
+  "dsarDownloadExpired": "Liên kết xuất dữ liệu cá nhân không tồn tại hoặc đã hết hạn.",
+  "consentDefinitionNotFound": "Không tìm thấy định nghĩa mục đích đồng ý phù hợp.",
+  "consentMandatoryCannotWithdraw": "Mục đích đồng ý này là bắt buộc để duy trì dịch vụ, không thể rút lại trực tiếp (hãy tạo yêu cầu xóa dữ liệu cá nhân nếu muốn ngừng sử dụng).",
+  "consentRecordNotFound": "Không tìm thấy bản ghi đồng ý đang hiệu lực cho mục đích này.",
+  "legalHoldNotFound": "Không tìm thấy lệnh tạm giữ dữ liệu pháp lý (Legal Hold).",
+  "legalHoldAlreadyReleased": "Lệnh tạm giữ pháp lý này đã được giải phóng trước đó.",
+  "legalHoldTargetRequired": "Phải cung cấp thông tin đối tượng cần tạm giữ tương ứng với phạm vi đã chọn.",
+  "blockedByLegalHold": "Thao tác xóa hoặc thu dọn dữ liệu bị chặn do đối tượng đang nằm trong lệnh tạm giữ pháp lý (Legal Hold)."
+}

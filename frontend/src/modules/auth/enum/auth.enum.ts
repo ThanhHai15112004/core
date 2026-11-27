@@ -6,7 +6,8 @@ export type AuthSubTabId =
   | 'service-accounts'
   | 'federated-identity'
   | 'scim-provisioning'
-  | 'privileged-access';
+  | 'privileged-access'
+  | 'data-governance';
 
 export interface AuthSubTabMeta {
   readonly id: AuthSubTabId;
@@ -65,6 +66,13 @@ export const AUTH_MODULE_TABS: readonly AuthSubTabMeta[] = [
     badge: '14.4',
     description:
       'Đánh dấu vai trò/quyền nhạy cảm, MFA Step-Up, cấp quyền tạm thời (JIT), Break-glass, cảnh báo & rà soát định kỳ',
+  },
+  {
+    id: 'data-governance',
+    label: 'Quyền Riêng Tư & Dữ Liệu',
+    badge: '14.5',
+    description:
+      'Phân loại dữ liệu, trường nhạy cảm (Log/Export), Retention, DSAR (Xem/Xuất/Xóa có ngoại lệ), Consent & Legal Hold',
   },
 ] as const;
 

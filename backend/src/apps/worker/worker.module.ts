@@ -38,6 +38,7 @@ import { ReconciliationModule } from '@modules/reconciliation/index.js';
 import { BackupOpsModule } from '@modules/backup-ops/index.js';
 import { DrOpsModule } from '@modules/dr-ops/index.js';
 import { PrivilegedAccessModule } from '@modules/privileged-access/index.js';
+import { DataGovernanceModule } from '@modules/data-governance/index.js';
 import { SystemProcessor } from './processors/system/system.processor.js';
 import { CriticalProcessor } from './processors/critical/critical.processor.js';
 import { NotificationsProcessor } from './processors/notifications/notifications.processor.js';
@@ -88,6 +89,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     BackupOpsModule,
     DrOpsModule,
     PrivilegedAccessModule,
+    DataGovernanceModule,
   ],
   providers: [...PROCESSORS, WorkerRuntimeContributor, OutboxRelayRunner],
   exports: [...PROCESSORS],

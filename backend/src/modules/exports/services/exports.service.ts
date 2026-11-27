@@ -1,9 +1,11 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
+  DataGovernanceHookRegistry,
   ExportRegistryService,
   ForbiddenAppException,
   HTTP_ERROR_CODE,
   NotFoundAppException,
+  defaultDataGovernanceHookRegistry,
   defaultExportRegistry,
   resolveExportContentType,
   resolveExportFormat,
@@ -29,13 +31,16 @@ import type { ExecuteExportResponse } from '../responses/exports.response.js';
 export class ExportsService implements IExportsPublicService {
   private readonly logger = new Logger(ExportsService.name);
   private readonly exportRegistry: ExportRegistryService;
+  private readonly governanceHooks: DataGovernanceHookRegistry;
 
   constructor(
     @Optional() private readonly historyRepository?: ExportHistoryRepository,
     @Optional() exportRegistry?: ExportRegistryService,
     @Optional() private readonly platformSecurityService?: PlatformSecurityService,
+    @Optional() governanceHooks?: DataGovernanceHookRegistry,
   ) {
     this.exportRegistry = exportRegistry ?? defaultExportRegistry;
+    this.governanceHooks = governanceHooks ?? defaultDataGovernanceHookRegistry;
   }
 
   private ensureDefaultExecutorsRegistered(): void {
@@ -77,6 +82,20 @@ export class ExportsService implements IExportsPublicService {
       jobId: `exp_${Date.now()}`,
     });
 
+    const sensitiveEvaluator = this.governanceHooks.getSensitiveFieldEvaluator();
+    let effectiveCsvContent = jobResult.csvContent ?? '';
+    if (effectiveCsvContent && sensitiveEvaluator?.sanitizeCsvExport) {
+      const sanitized = await sensitiveEvaluator.sanitizeCsvExport({
+        moduleName: executor.module,
+        profileCode: cleanProfile,
+        csvContent: effectiveCsvContent,
+        actor,
+      });
+      if (sanitized.csvContent !== undefined) {
+        effectiveCsvContent = sanitized.csvContent;
+      }
+    }
+
     const resolvedFormat = resolveExportFormat(jobResult.format ?? query.format, 'csv');
     const resolvedContentType = jobResult.contentType ?? resolveExportContentType(resolvedFormat);
 
@@ -95,7 +114,7 @@ export class ExportsService implements IExportsPublicService {
         ...(jobResult.appliedLimitPolicy !== undefined
           ? { appliedLimitPolicy: jobResult.appliedLimitPolicy }
           : {}),
-        csvContent: jobResult.csvContent ?? '',
+        csvContent: effectiveCsvContent,
         xlsxBase64: jobResult.xlsxBase64 ?? '',
         ...(jobResult.pdfBase64 !== undefined ? { pdfBase64: jobResult.pdfBase64 } : {}),
         historyId: jobResult.historyId,
@@ -129,7 +148,7 @@ export class ExportsService implements IExportsPublicService {
         ? Buffer.from(jobResult.xlsxBase64 ?? '', 'base64')
         : resolvedFormat === 'pdf'
           ? Buffer.from(jobResult.pdfBase64 ?? '', 'base64')
-          : Buffer.from(jobResult.csvContent ?? '', 'utf8');
+          : Buffer.from(effectiveCsvContent, 'utf8');
     const artifact = this.exportRegistry.storeTemporaryArtifact({
       profileCode: executor.profileCode,
       module: executor.module,
@@ -149,7 +168,7 @@ export class ExportsService implements IExportsPublicService {
       contentType: resolvedContentType,
       format: resolvedFormat,
       totalExported: jobResult.totalExported,
-      csvContent: jobResult.csvContent ?? '',
+      csvContent: effectiveCsvContent,
       xlsxBase64: jobResult.xlsxBase64 ?? '',
       ...(jobResult.pdfBase64 !== undefined ? { pdfBase64: jobResult.pdfBase64 } : {}),
       historyId: started.id,

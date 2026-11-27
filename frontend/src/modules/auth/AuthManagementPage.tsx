@@ -12,12 +12,14 @@ import {
   Link2,
   UserCheck,
   ShieldAlert,
+  Database,
 } from 'lucide-react';
 import { AUTH_MODULE_TABS, type AuthSubTabId } from './enum/auth.enum';
 import { useAuthManagement } from './hooks/useAuthManagement';
 import { useFederatedIdentity } from './hooks/useFederatedIdentity';
 import { useScimProvisioning } from './hooks/useScimProvisioning';
 import { usePrivilegedAccess } from './hooks/usePrivilegedAccess';
+import { useDataGovernance } from './hooks/useDataGovernance';
 import { AuthGatewayPanel } from './components/AuthGatewayPanel';
 import { MfaAndDevicesPanel } from './components/MfaAndDevicesPanel';
 import { SessionsAndHistoryPanel } from './components/SessionsAndHistoryPanel';
@@ -26,6 +28,7 @@ import { ServiceAccountsPanel } from './components/ServiceAccountsPanel';
 import { FederatedIdentityPanel } from './components/FederatedIdentityPanel';
 import { ScimProvisioningPanel } from './components/ScimProvisioningPanel';
 import { PrivilegedAccessPanel } from './components/privileged-access/PrivilegedAccessPanel';
+import { DataGovernancePanel } from './components/data-governance/DataGovernancePanel';
 import { authStyles } from './components/auth-ui.styles';
 
 export const AuthManagementPage: React.FC = () => {
@@ -56,6 +59,7 @@ export const AuthManagementPage: React.FC = () => {
   const federated = useFederatedIdentity(accessToken, notify);
   const scim = useScimProvisioning(accessToken, notify);
   const pam = usePrivilegedAccess(accessToken, notify);
+  const governance = useDataGovernance(accessToken, notify);
 
   const resolveTabIcon = (id: AuthSubTabId) => {
     switch (id) {
@@ -75,6 +79,8 @@ export const AuthManagementPage: React.FC = () => {
         return <UserCheck size={15} />;
       case 'privileged-access':
         return <ShieldAlert size={15} />;
+      case 'data-governance':
+        return <Database size={15} />;
     }
   };
 
@@ -403,6 +409,35 @@ export const AuthManagementPage: React.FC = () => {
           onCreateReview={pam.createReview}
           onLoadReviewDetail={pam.loadReviewDetail}
           onDecideReviewItem={pam.decideReviewItem}
+        />
+      )}
+
+      {subTab === 'data-governance' && (
+        <DataGovernancePanel
+          accessToken={accessToken}
+          busy={governance.busy}
+          overview={governance.overview}
+          classifications={governance.classifications}
+          sensitiveFields={governance.sensitiveFields}
+          dsarRequests={governance.dsarRequests}
+          consentDefinitions={governance.consentDefinitions}
+          consentRecords={governance.consentRecords}
+          legalHolds={governance.legalHolds}
+          lastExportPreview={governance.lastExportPreview}
+          onClearExportPreview={governance.clearExportPreview}
+          onRefresh={governance.refreshAll}
+          onUpsertClassification={governance.upsertClassification}
+          onUpsertSensitiveField={governance.upsertSensitiveField}
+          onRunRetentionSweep={governance.runRetentionSweep}
+          onCreateDsarRequest={governance.createDsarRequest}
+          onApproveDsar={governance.approveDsar}
+          onRejectDsar={governance.rejectDsar}
+          onDownloadDsarExport={governance.downloadDsarExport}
+          onUpsertConsentDefinition={governance.upsertConsentDefinition}
+          onGrantConsent={governance.grantConsent}
+          onWithdrawConsent={governance.withdrawConsent}
+          onCreateLegalHold={governance.createLegalHold}
+          onReleaseLegalHold={governance.releaseLegalHold}
         />
       )}
     </main>

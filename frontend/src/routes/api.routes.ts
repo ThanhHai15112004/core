@@ -222,6 +222,27 @@ export const API_ROUTES = {
       `/privileged-access/reviews/${reviewId}/items/${itemId}/decide`,
     REVIEW_CLOSE: (id: string | number) => `/privileged-access/reviews/${id}/close`,
   },
+  DATA_GOVERNANCE: {
+    OVERVIEW: '/data-governance/overview',
+    CLASSIFICATIONS: (qs = '') => `/data-governance/classifications${qs ? `?${qs}` : ''}`,
+    CLASSIFICATION_BY_ID: (id: string | number) => `/data-governance/classifications/${id}`,
+    SENSITIVE_FIELDS: (qs = '') => `/data-governance/sensitive-fields${qs ? `?${qs}` : ''}`,
+    SENSITIVE_FIELD_BY_ID: (id: string | number) => `/data-governance/sensitive-fields/${id}`,
+    RETENTION_SWEEP: '/data-governance/retention/sweep',
+    DSAR: (qs = '') => `/data-governance/dsar${qs ? `?${qs}` : ''}`,
+    DSAR_BY_ID: (id: string | number) => `/data-governance/dsar/${id}`,
+    DSAR_APPROVE: (id: string | number) => `/data-governance/dsar/${id}/approve`,
+    DSAR_REJECT: (id: string | number) => `/data-governance/dsar/${id}/reject`,
+    DSAR_DOWNLOAD: (token: string) =>
+      `/data-governance/dsar/downloads/${encodeURIComponent(token)}`,
+    CONSENT_DEFINITIONS: (qs = '') =>
+      `/data-governance/consents/definitions${qs ? `?${qs}` : ''}`,
+    CONSENT_RECORDS: (qs = '') => `/data-governance/consents/records${qs ? `?${qs}` : ''}`,
+    CONSENT_GRANT: '/data-governance/consents/grant',
+    CONSENT_WITHDRAW: '/data-governance/consents/withdraw',
+    LEGAL_HOLDS: (qs = '') => `/data-governance/legal-holds${qs ? `?${qs}` : ''}`,
+    LEGAL_HOLD_RELEASE: (id: string | number) => `/data-governance/legal-holds/${id}/release`,
+  },
   USERS: {
     LIST: (qs = '') => `/users${qs ? `?${qs}` : ''}`,
     CREATE: '/users',

@@ -1,0 +1,20 @@
+{
+  "moduleDisabled": "The Data Privacy & Governance module is currently disabled by project configuration.",
+  "dsarDisabled": "Personal data request (DSAR) functionality is currently disabled.",
+  "consentDisabled": "User consent management functionality is currently disabled.",
+  "legalHoldDisabled": "Legal Hold functionality is currently disabled.",
+  "classificationNotFound": "Requested data classification policy was not found.",
+  "sensitiveFieldNotFound": "Requested sensitive field rule was not found.",
+  "dsarNotFound": "Personal data request (DSAR) was not found.",
+  "dsarInvalidStatus": "Personal data request status is invalid for this operation.",
+  "dsarSelfApprovalForbidden": "The requester is not allowed to self-approve their own personal data erasure request.",
+  "dsarForbiddenAccess": "You are not authorized to view or act upon another user's personal data request.",
+  "dsarDownloadExpired": "Personal data export link was not found or has expired.",
+  "consentDefinitionNotFound": "Matching consent purpose definition was not found.",
+  "consentMandatoryCannotWithdraw": "This consent purpose is mandatory for service operation and cannot be directly withdrawn (submit a personal data erasure request instead).",
+  "consentRecordNotFound": "No active granted consent record was found for this purpose.",
+  "legalHoldNotFound": "Legal Hold record was not found.",
+  "legalHoldAlreadyReleased": "This Legal Hold has already been released.",
+  "legalHoldTargetRequired": "Target identifier matching the selected Legal Hold scope is required.",
+  "blockedByLegalHold": "Data deletion or retention purge is blocked because the target is under an active Legal Hold."
+}

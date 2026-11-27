@@ -2,11 +2,13 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Traced } from '@packages/tracing/index.js';
 import {
   BadRequestAppException,
+  DataGovernanceHookRegistry,
   DomainEventBusService,
   NotFoundAppException,
   OutboxPublisherService,
   type PaginatedResult,
   defaultCustomFieldRegistry,
+  defaultDataGovernanceHookRegistry,
   defaultDomainEventBus,
   defaultOutboxPublisher,
   defaultSearchRegistry,
@@ -726,6 +728,10 @@ export class UsersService implements IUsersPublicService {
     actorId?: number,
     actor?: UserIdentity,
   ): Promise<UserResponse> {
+    const legalHoldGuard = defaultDataGovernanceHookRegistry.getLegalHoldGuard();
+    if (legalHoldGuard) {
+      await legalHoldGuard.assertNotOnLegalHold({ userId: id });
+    }
     return this.runStatusTransition({
       id,
       toStatus: USER_STATUS.ARCHIVED,
@@ -1103,5 +1109,71 @@ export class UsersService implements IUsersPublicService {
   ): Promise<ProvisionedUserView> {
     const activated = await this.activateUser(userId, actorId);
     return this.toProvisionedUserView(activated);
+  }
+
+  public async anonymizePersonalData(
+    userId: number,
+    reason?: string | null,
+    actorId?: number,
+  ): Promise<{ readonly anonymized: boolean; readonly fieldsCleared: readonly string[] }> {
+    const legalHoldGuard: DataGovernanceHookRegistry['getLegalHoldGuard'] extends () => infer R
+      ? R
+      : never = defaultDataGovernanceHookRegistry.getLegalHoldGuard();
+    if (legalHoldGuard) {
+      await legalHoldGuard.assertNotOnLegalHold({ userId });
+    }
+
+    const existing = await this.userRepository.findByIdWithArchived(userId, true);
+    if (!existing) {
+      return { anonymized: false, fieldsCleared: [] };
+    }
+
+    const anonEmail = `erased.${userId}.${Date.now()}@anonymized.local`;
+    await this.update(
+      userId,
+      {
+        email: anonEmail,
+        phone: null,
+        firstName: 'Anonymized',
+        lastName: `User#${userId}`,
+        fullName: `Anonymized User #${userId}`,
+        avatarUrl: null,
+        dateOfBirth: null,
+        identityNumber: null,
+        address: null,
+        city: null,
+        country: null,
+        bio: null,
+      },
+      actorId,
+    );
+    await this.runStatusTransition({
+      id: userId,
+      toStatus: USER_STATUS.ARCHIVED,
+      action: 'user.archive',
+      reason: reason?.trim() || 'Personal data anonymized via DSAR Erasure',
+      actorId,
+      preserveLockReason: false,
+      lockReason: reason?.trim() || 'DSAR Erasure',
+      archiveTimestamp: new Date(),
+    });
+
+    return {
+      anonymized: true,
+      fieldsCleared: [
+        'email',
+        'phone',
+        'firstName',
+        'lastName',
+        'fullName',
+        'avatarUrl',
+        'dateOfBirth',
+        'identityNumber',
+        'address',
+        'city',
+        'country',
+        'bio',
+      ],
+    };
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, type OnModuleInit } from '@nestjs/common';
 import { CoreConfigService } from '@packages/config/index.js';
 import {
   BACKUP_QUEUE_TOPICS,
+  DATA_GOVERNANCE_QUEUE_TOPICS,
   DR_QUEUE_TOPICS,
   IDEMPOTENCY_QUEUE_TOPICS,
   OUTBOX_QUEUE_TOPICS,
@@ -196,6 +197,32 @@ export class SystemTask implements OnModuleInit {
       pattern: '0 2 * * *',
       tz: this.config.scheduler.timezone,
       data: { triggeredBy: 'scheduler', module: 'privileged-access' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'data-governance.retention.sweep',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: DATA_GOVERNANCE_QUEUE_TOPICS.RETENTION_SWEEP_TICK,
+      description:
+        'Thực thi định kỳ chính sách thời gian lưu dữ liệu (Retention) theo loại dữ liệu, tự động bỏ qua mục đang bị Legal Hold (14.5).',
+      pattern: '45 3 * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'data-governance' },
+      notifyOnFailure: true,
+      misfirePolicy: 'run_once',
+    });
+
+    this.registry.register({
+      id: 'data-governance.expiration.sweep',
+      queue: QUEUES.SYSTEM_EVENTS,
+      name: DATA_GOVERNANCE_QUEUE_TOPICS.GOVERNANCE_EXPIRATION_TICK,
+      description:
+        'Tự động hết hạn lệnh Legal Hold, Consent có thời hạn và dọn liên kết tải dữ liệu cá nhân DSAR quá hạn (14.5).',
+      pattern: '*/15 * * * *',
+      tz: this.config.scheduler.timezone,
+      data: { triggeredBy: 'scheduler', module: 'data-governance' },
       notifyOnFailure: true,
       misfirePolicy: 'run_once',
     });

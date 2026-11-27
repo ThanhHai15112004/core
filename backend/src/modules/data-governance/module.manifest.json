@@ -1,0 +1,366 @@
+{
+  "$schema": "../../packages/kernel/schemas/module.manifest.schema.json",
+  "name": "data-governance",
+  "displayName": "Data Privacy & Governance",
+  "version": "1.0.0",
+  "description": "Module tùy chọn Quyền riêng tư và Quản trị dữ liệu (Mục 14.5): phân loại dữ liệu (Public/Internal/Confidential/Restricted), đánh dấu trường nhạy cảm cho Log/Export/Phân quyền, chính sách thời gian lưu dữ liệu (Retention), yêu cầu Xem/Xuất/Xóa dữ liệu cá nhân có ngoại lệ & phê duyệt (DSAR), quản lý sự đồng ý (Consent) và tạm giữ pháp lý (Legal Hold).",
+  "type": "core",
+  "category": "Security",
+  "author": "Core Platform Team",
+  "entryModule": "DataGovernanceModule",
+  "dependencies": [
+    "database",
+    "security",
+    "logging",
+    "users",
+    "sessions",
+    "audit",
+    "files",
+    "custom-fields",
+    "exports",
+    "settings",
+    "feature-flags",
+    "codes",
+    "sequences"
+  ],
+  "permissions": [
+    "data-governance.read",
+    "data-governance.manage",
+    "data-governance.sensitive.read",
+    "data-governance.dsar.request",
+    "data-governance.dsar.approve",
+    "data-governance.consent.manage",
+    "data-governance.legal_hold.manage"
+  ],
+  "events": {
+    "published": [
+      "data-governance.classification.updated",
+      "data-governance.sensitive-field.updated",
+      "data-governance.retention.executed",
+      "data-governance.dsar.created",
+      "data-governance.dsar.approved",
+      "data-governance.dsar.rejected",
+      "data-governance.dsar.completed",
+      "data-governance.consent.definition.saved",
+      "data-governance.consent.granted",
+      "data-governance.consent.withdrawn",
+      "data-governance.legal-hold.created",
+      "data-governance.legal-hold.released"
+    ],
+    "subscribed": []
+  },
+  "database": {
+    "hasMigrations": true,
+    "tables": [
+      "data_classifications",
+      "data_sensitive_fields",
+      "privacy_dsar_requests",
+      "privacy_consent_definitions",
+      "privacy_user_consents",
+      "data_legal_holds"
+    ]
+  },
+  "codeTypes": [
+    {
+      "code": "data_governance.classification_level",
+      "name": "Mức phân loại dữ liệu",
+      "description": "4 cấp độ phân loại bảo mật dữ liệu (Public, Internal, Confidential, Restricted)",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PUBLIC",
+          "behaviorCode": "PUBLIC",
+          "name": "Công khai (Public)",
+          "labels": { "vi": "Công khai (Public)", "en": "Public" },
+          "badgeTone": "success",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "INTERNAL",
+          "behaviorCode": "INTERNAL",
+          "name": "Nội bộ (Internal)",
+          "labels": { "vi": "Nội bộ (Internal)", "en": "Internal" },
+          "badgeTone": "info",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "CONFIDENTIAL",
+          "behaviorCode": "CONFIDENTIAL",
+          "name": "Bảo mật (Confidential)",
+          "labels": { "vi": "Bảo mật (Confidential)", "en": "Confidential" },
+          "badgeTone": "warning",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "RESTRICTED",
+          "behaviorCode": "RESTRICTED",
+          "name": "Tối mật / Hạn chế nghiêm ngặt (Restricted)",
+          "labels": { "vi": "Hạn chế nghiêm ngặt (Restricted)", "en": "Restricted" },
+          "badgeTone": "danger",
+          "sortOrder": 4,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "data_governance.dsar_status",
+      "name": "Trạng thái yêu cầu dữ liệu cá nhân (DSAR)",
+      "description": "Vòng đời xử lý yêu cầu Xem, Xuất và Xóa dữ liệu cá nhân",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "PENDING",
+          "behaviorCode": "PENDING",
+          "name": "Đang xử lý",
+          "labels": { "vi": "Đang xử lý", "en": "Pending" },
+          "badgeTone": "info",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "PENDING_APPROVAL",
+          "behaviorCode": "PENDING",
+          "name": "Chờ phê duyệt xóa",
+          "labels": { "vi": "Chờ phê duyệt xóa", "en": "Pending Approval" },
+          "badgeTone": "warning",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "APPROVED",
+          "behaviorCode": "APPROVED",
+          "name": "Đã phê duyệt",
+          "labels": { "vi": "Đã phê duyệt", "en": "Approved" },
+          "badgeTone": "info",
+          "sortOrder": 3,
+          "isSystem": true
+        },
+        {
+          "numericCode": 4,
+          "code": "COMPLETED",
+          "behaviorCode": "COMPLETED",
+          "name": "Hoàn tất",
+          "labels": { "vi": "Hoàn tất", "en": "Completed" },
+          "badgeTone": "success",
+          "sortOrder": 4,
+          "isSystem": true
+        },
+        {
+          "numericCode": 5,
+          "code": "PARTIALLY_COMPLETED",
+          "behaviorCode": "COMPLETED",
+          "name": "Hoàn tất kèm ngoại lệ giữ lại",
+          "labels": { "vi": "Hoàn tất (có ngoại lệ)", "en": "Completed with Exceptions" },
+          "badgeTone": "warning",
+          "sortOrder": 5,
+          "isSystem": true
+        },
+        {
+          "numericCode": 6,
+          "code": "REJECTED",
+          "behaviorCode": "REJECTED",
+          "name": "Đã từ chối",
+          "labels": { "vi": "Đã từ chối", "en": "Rejected" },
+          "badgeTone": "danger",
+          "sortOrder": 6,
+          "isSystem": true
+        },
+        {
+          "numericCode": 7,
+          "code": "BLOCKED_LEGAL_HOLD",
+          "behaviorCode": "BLOCKED",
+          "name": "Bị chặn bởi Legal Hold",
+          "labels": { "vi": "Chặn bởi Legal Hold", "en": "Blocked by Legal Hold" },
+          "badgeTone": "danger",
+          "sortOrder": 7,
+          "isSystem": true
+        },
+        {
+          "numericCode": 8,
+          "code": "CANCELLED",
+          "behaviorCode": "CANCELLED",
+          "name": "Đã hủy",
+          "labels": { "vi": "Đã hủy", "en": "Cancelled" },
+          "badgeTone": "neutral",
+          "sortOrder": 8,
+          "isSystem": true
+        }
+      ]
+    },
+    {
+      "code": "data_governance.legal_hold_status",
+      "name": "Trạng thái tạm giữ pháp lý (Legal Hold)",
+      "description": "Trạng thái hiệu lực của lệnh tạm giữ dữ liệu không được xóa",
+      "isSystem": true,
+      "allowCustomValues": false,
+      "values": [
+        {
+          "numericCode": 1,
+          "code": "ACTIVE",
+          "behaviorCode": "ACTIVE",
+          "name": "Đang tạm giữ",
+          "labels": { "vi": "Đang tạm giữ", "en": "Active Hold" },
+          "badgeTone": "danger",
+          "sortOrder": 1,
+          "isSystem": true
+        },
+        {
+          "numericCode": 2,
+          "code": "RELEASED",
+          "behaviorCode": "RELEASED",
+          "name": "Đã giải phóng",
+          "labels": { "vi": "Đã giải phóng", "en": "Released" },
+          "badgeTone": "success",
+          "sortOrder": 2,
+          "isSystem": true
+        },
+        {
+          "numericCode": 3,
+          "code": "EXPIRED",
+          "behaviorCode": "EXPIRED",
+          "name": "Hết hiệu lực",
+          "labels": { "vi": "Hết hiệu lực", "en": "Expired" },
+          "badgeTone": "neutral",
+          "sortOrder": 3,
+          "isSystem": true
+        }
+      ]
+    }
+  ],
+  "settingGroups": [
+    {
+      "code": "data_governance",
+      "name": "Quyền riêng tư & Quản trị dữ liệu (14.5)",
+      "description": "Cấu hình SLA xử lý DSAR, phê duyệt xóa dữ liệu cá nhân, thời hạn link xuất dữ liệu và Retention mặc định",
+      "icon": "shield-lock",
+      "sortOrder": 45,
+      "isSystem": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "data-governance.dsar.sla_days",
+      "groupCode": "data_governance",
+      "name": "Thời hạn SLA xử lý yêu cầu DSAR (ngày)",
+      "description": "Số ngày tối đa xử lý yêu cầu xem/xuất/xóa dữ liệu cá nhân theo quy định pháp lý",
+      "valueType": "NUMBER",
+      "defaultValue": 30,
+      "isSystem": true,
+      "sortOrder": 1
+    },
+    {
+      "key": "data-governance.dsar.export_ttl_minutes",
+      "groupCode": "data_governance",
+      "name": "Thời hạn hiệu lực liên kết tải gói dữ liệu cá nhân (phút)",
+      "description": "Số phút lưu liên kết tải xuống gói JSON/CSV của yêu cầu Xuất dữ liệu cá nhân trước khi tự hủy",
+      "valueType": "NUMBER",
+      "defaultValue": 1440,
+      "isSystem": true,
+      "sortOrder": 2
+    },
+    {
+      "key": "data-governance.dsar.erasure_require_approval",
+      "groupCode": "data_governance",
+      "name": "Bắt buộc phê duyệt trước khi xóa dữ liệu cá nhân",
+      "description": "Khi bật, mọi yêu cầu xóa dữ liệu cá nhân (ERASURE) phải được DPO / Quản trị phê duyệt kèm kiểm tra ngoại lệ",
+      "valueType": "BOOLEAN",
+      "defaultValue": true,
+      "isSystem": true,
+      "sortOrder": 3
+    },
+    {
+      "key": "data-governance.dsar.allow_self_approval",
+      "groupCode": "data_governance",
+      "name": "Cho phép tự phê duyệt yêu cầu xóa dữ liệu của chính mình",
+      "description": "Mặc định tắt để đảm bảo nguyên tắc kiểm soát chéo (4-eyes) khi xóa dữ liệu",
+      "valueType": "BOOLEAN",
+      "defaultValue": false,
+      "isSystem": true,
+      "sortOrder": 4
+    },
+    {
+      "key": "data-governance.retention.default_days",
+      "groupCode": "data_governance",
+      "name": "Thời gian lưu dữ liệu mặc định (ngày)",
+      "description": "Số ngày lưu trữ mặc định khi khởi tạo mới danh mục phân loại dữ liệu",
+      "valueType": "NUMBER",
+      "defaultValue": 365,
+      "isSystem": true,
+      "sortOrder": 5
+    }
+  ],
+  "featureFlags": [
+    {
+      "key": "data-governance.enabled",
+      "name": "Bật Module Quyền riêng tư & Quản trị dữ liệu (14.5)",
+      "description": "Cho phép bật/tắt toàn bộ chức năng Quyền riêng tư & Quản trị dữ liệu tùy theo yêu cầu pháp lý của từng dự án",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "data-governance.dsar.enabled",
+      "name": "Bật Yêu cầu Xem / Xuất / Xóa dữ liệu cá nhân (DSAR)",
+      "description": "Cho phép tạo và xử lý yêu cầu quyền chủ thể dữ liệu (Access, Export, Erasure)",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "data-governance.consent.enabled",
+      "name": "Bật Quản lý Sự đồng ý của người dùng (Consent Management)",
+      "description": "Theo dõi đồng ý và rút lại sự đồng ý theo mục đích, phiên bản chính sách và thời gian",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    },
+    {
+      "key": "data-governance.legal_hold.enabled",
+      "name": "Bật Tạm giữ dữ liệu pháp lý (Legal Hold)",
+      "description": "Cho phép đóng băng không cho xóa hoặc dọn Retention đối với dữ liệu phục vụ điều tra/pháp lý",
+      "isEnabled": true,
+      "rolloutPercentage": 100,
+      "isSystem": true
+    }
+  ],
+  "sequences": [
+    {
+      "key": "data-governance.dsar_code",
+      "name": "Mã yêu cầu dữ liệu cá nhân (DSAR)",
+      "description": "Chuỗi sinh mã tự động cho yêu cầu Xem/Xuất/Xóa dữ liệu cá nhân",
+      "prefix": "DSAR",
+      "separator": "-",
+      "dateFormat": "YYYYMMDD",
+      "paddingLength": 4,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "DAILY",
+      "isSystem": true
+    },
+    {
+      "key": "data-governance.legal_hold_code",
+      "name": "Mã lệnh tạm giữ pháp lý (Legal Hold)",
+      "description": "Chuỗi sinh mã tự động cho lệnh tạm giữ dữ liệu không được xóa",
+      "prefix": "LHOLD",
+      "separator": "-",
+      "dateFormat": "YYYYMMDD",
+      "paddingLength": 4,
+      "startValue": 1,
+      "step": 1,
+      "resetPolicy": "YEARLY",
+      "isSystem": true
+    }
+  ]
+}

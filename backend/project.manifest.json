@@ -59,6 +59,7 @@
     "federated-identity",
     "identity-provisioning",
     "privileged-access",
+    "data-governance",
     "payments",
     "provider-registry",
     "outbox",

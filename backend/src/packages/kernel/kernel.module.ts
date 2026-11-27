@@ -58,6 +58,10 @@ import {
   ReconciliationRegistryService,
   defaultReconciliationRegistry,
 } from './registries/reconciliation-registry.service.js';
+import {
+  DataGovernanceHookRegistry,
+  defaultDataGovernanceHookRegistry,
+} from './registries/data-governance-hook.registry.js';
 
 @Global()
 @Module({
@@ -142,6 +146,10 @@ import {
       provide: RECONCILIATION_PORT,
       useValue: defaultReconciliationRegistry,
     },
+    {
+      provide: DataGovernanceHookRegistry,
+      useValue: defaultDataGovernanceHookRegistry,
+    },
   ],
   exports: [
     CodeRegistryService,
@@ -164,6 +172,7 @@ import {
     IDEMPOTENCY_PORT,
     ReconciliationRegistryService,
     RECONCILIATION_PORT,
+    DataGovernanceHookRegistry,
   ],
 })
 export class KernelModule {}

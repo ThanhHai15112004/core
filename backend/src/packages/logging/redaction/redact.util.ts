@@ -22,6 +22,7 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 const EXTRA_SENSITIVE_KEYS = new Set<string>();
+const DYNAMIC_SENSITIVE_KEYS = new Set<string>();
 
 /** Chuẩn hóa tên key nhạy cảm (chữ thường, bỏ `-` và `_`). */
 function normalizeKeyName(key: string): string {
@@ -37,13 +38,22 @@ export function configureExtraSensitiveKeys(keys: readonly string[]): void {
   }
 }
 
+/** Đồng bộ động danh sách tên field nhạy cảm từ chính sách quản trị dữ liệu mà không ghi đè biến môi trường. */
+export function configureDynamicSensitiveKeys(keys: readonly string[]): void {
+  DYNAMIC_SENSITIVE_KEYS.clear();
+  for (const key of keys) {
+    const normalized = normalizeKeyName(key.trim());
+    if (normalized) DYNAMIC_SENSITIVE_KEYS.add(normalized);
+  }
+}
+
 /** So khớp không phân biệt hoa thường và bỏ `-`/`_`: `X-Api-Key`, `api_key`, `apiKey` đều nhạy cảm. */
 /** Tên field luôn bị che (đã chuẩn hoá: chữ thường, bỏ `-` / `_`). */
 export const SENSITIVE_KEY_NAMES: readonly string[] = [...SENSITIVE_KEYS];
 
 /** Trả về toàn bộ danh sách tên field nhạy cảm (mặc định + bổ sung qua cấu hình). */
 export function getSensitiveKeyNames(): string[] {
-  return [...new Set([...SENSITIVE_KEYS, ...EXTRA_SENSITIVE_KEYS])];
+  return [...new Set([...SENSITIVE_KEYS, ...EXTRA_SENSITIVE_KEYS, ...DYNAMIC_SENSITIVE_KEYS])];
 }
 
 /** Kiểm tra xem tên trường có chứa thông tin nhạy cảm cần che giấu hay không */
@@ -54,7 +64,9 @@ export function isSensitiveKey(key: string): boolean {
     SENSITIVE_KEYS.has(normalized) ||
     SENSITIVE_KEYS.has(lower) ||
     EXTRA_SENSITIVE_KEYS.has(normalized) ||
-    EXTRA_SENSITIVE_KEYS.has(lower)
+    EXTRA_SENSITIVE_KEYS.has(lower) ||
+    DYNAMIC_SENSITIVE_KEYS.has(normalized) ||
+    DYNAMIC_SENSITIVE_KEYS.has(lower)
   );
 }
 
