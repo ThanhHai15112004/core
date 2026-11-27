@@ -3,4 +3,7 @@ export * from './responses/database-ops.response.js';
 export * from './services/database-ops.service.js';
 export * from './services/database-rules.js';
 export * from './services/database-monitor.service.js';
+export * from './services/migration-deploy.service.js';
+export * from './services/backfill-orchestrator.service.js';
+export * from './database-deploy.module.js';
 export * from './database-ops.module.js';

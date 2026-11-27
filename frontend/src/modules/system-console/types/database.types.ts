@@ -394,3 +394,174 @@ export interface DbBackupSummary {
   latest: DbBackupReportRecord | null;
   history: DbBackupReportRecord[];
 }
+
+export type DbMigrationPhase = 'expand' | 'contract' | 'standard';
+export type DbMigrationRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export interface DbPreflightFinding {
+  code: string;
+  severity: 'info' | 'warning' | 'error';
+  category: 'syntax' | 'dependency' | 'checksum' | 'expand_contract' | 'lock_risk' | 'backfill';
+  migrationName: string;
+  message: string;
+  recommendation?: string;
+}
+
+export interface DbMigrationPreflightSummary {
+  report: {
+    checkedAt: string;
+    mode: 'online' | 'offline';
+    passed: boolean;
+    strictPassed: boolean;
+    overallRiskLevel: DbMigrationRiskLevel;
+    requiresBackup: boolean;
+    totalMigrations: number;
+    appliedCount: number;
+    pendingCount: number;
+    errorCount: number;
+    warningCount: number;
+    findings: DbPreflightFinding[];
+  };
+  backupReadiness: {
+    required: boolean;
+    satisfied: boolean;
+    reason: string;
+    latestBackupId: number | null;
+    latestBackupCode: string | null;
+    latestBackupAt: string | null;
+    latestBackupVerified: boolean;
+  };
+  environment: string;
+  approvalRequiredInProd: boolean;
+}
+
+export interface DbPostMigrationVerificationReport {
+  checkedAt: string;
+  passed: boolean;
+  durationMs: number;
+  schema: {
+    passed: boolean;
+    pendingCount: number;
+    tamperedCount: number;
+    invalidIndexes: string[];
+    missingTables: string[];
+  };
+  data: {
+    passed: boolean;
+    totalChecks: number;
+    failedChecks: number;
+  };
+  health: {
+    passed: boolean;
+    dbOk: boolean;
+    dbLatencyMs: number | null;
+    appHealthChecked: boolean;
+    appHealthOk: boolean | null;
+    appHealthUrl: string | null;
+  };
+  checks: {
+    name: string;
+    category: 'schema' | 'data' | 'health';
+    passed: boolean;
+    detail: string;
+    durationMs: number;
+  }[];
+}
+
+export interface DbMigrationExecutionMetric {
+  name: string;
+  checksum: string;
+  durationMs: number;
+  lockTimeoutMs: number;
+  statementTimeoutMs: number;
+  exceededLockWarn: boolean;
+}
+
+export interface DbMigrationRolloutHistory {
+  id: number;
+  rolloutCode: string;
+  releaseVersion: string;
+  gitCommit: string | null;
+  environment: string;
+  phase: DbMigrationPhase;
+  riskLevel: DbMigrationRiskLevel;
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'POST_CHECK_FAILED' | 'NO_OP';
+  executedMigrations: DbMigrationExecutionMetric[];
+  approvedBy: string | null;
+  approvalTicket: string | null;
+  executedBy: string;
+  backupRecordId: number | null;
+  backupCode: string | null;
+  backupVerified: boolean;
+  lockTimeoutMs: number | null;
+  maxMigrationDurationMs: number | null;
+  durationMs: number;
+  preflightSummary: {
+    passed: boolean;
+    errorCount: number;
+    warningCount: number;
+    pendingCount: number;
+  } | null;
+  postCheckSummary: {
+    passed: boolean;
+    schemaPassed: boolean;
+    dataPassed: boolean;
+    healthPassed: boolean;
+  } | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface DbSafeMigratePayload {
+  confirm: string;
+  releaseVersion?: string;
+  approvedBy?: string;
+  approvalTicket?: string;
+  autoBackup?: boolean;
+  allowBreaking?: boolean;
+}
+
+export interface DbSafeMigrateResult {
+  rolloutCode: string;
+  dryRun: boolean;
+  status: 'RUNNING' | 'SUCCESS' | 'FAILED' | 'POST_CHECK_FAILED' | 'NO_OP' | 'DRY_RUN_READY';
+  executedMigrations: DbMigrationExecutionMetric[];
+  errorMessage: string | null;
+}
+
+export interface DbBackfillDefinition {
+  name: string;
+  description: string;
+  migrationName: string | null;
+  tableName: string | null;
+  defaultBatchSize: number;
+  defaultThrottleMs: number;
+}
+
+export interface DbBackfillJob {
+  id: number;
+  jobCode: string;
+  jobName: string;
+  migrationName: string | null;
+  queueJobId: string | null;
+  status: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  batchSize: number;
+  throttleMs: number;
+  processedRows: number;
+  updatedRows: number;
+  totalRows: number | null;
+  percent: number;
+  lastCursor: string | null;
+  dryRun: boolean;
+  cancelRequested: boolean;
+  triggeredBy: string;
+  errorMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface DbBackfillOverview {
+  definitions: DbBackfillDefinition[];
+  jobs: DbBackfillJob[];
+}

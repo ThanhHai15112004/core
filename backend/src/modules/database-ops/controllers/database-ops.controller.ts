@@ -1,8 +1,21 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Optional,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { Public } from '@packages/http/index.js';
 import { DATABASE_OPS_ROUTES as R } from '../routes/database-ops.routes.js';
+import { BackfillOrchestratorService } from '../services/backfill-orchestrator.service.js';
 import { DB_METRICS, DB_RANGES, DatabaseOpsService } from '../services/database-ops.service.js';
+import { MigrationDeployService } from '../services/migration-deploy.service.js';
 import { DatabaseValidationException } from '../exceptions/database-ops.exceptions.js';
 import type { DbMetric, DbRange } from '../responses/database-ops.response.js';
 
@@ -38,6 +51,32 @@ const sessionId = z.string().regex(/^\d{1,20}$/);
 const digest = z.string().regex(/^[\w-]{1,128}$/);
 /** Xác nhận hành động vận hành quan trọng trước khi thực thi */
 const confirm = (word: string) => z.object({ confirm: z.literal(word) });
+const deployMigrationsSchema = z.object({
+  confirm: z.literal('MIGRATE'),
+  releaseVersion: z.string().trim().min(1).max(80).optional(),
+  gitCommit: z.string().trim().min(1).max(64).optional(),
+  approvedBy: z.string().trim().min(1).max(120).optional(),
+  approvalTicket: z.string().trim().min(1).max(80).optional(),
+  executedBy: z.string().trim().min(1).max(120).optional(),
+  autoBackup: z.boolean().optional(),
+  allowBreaking: z.boolean().optional(),
+  lockTimeoutMs: z.coerce.number().int().min(500).max(300_000).optional(),
+  dryRun: z.boolean().optional(),
+});
+const historyQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  environment: z.string().trim().max(32).optional(),
+});
+const runBackfillSchema = z.object({
+  jobName: z.string().trim().min(1).max(120),
+  batchSize: z.coerce.number().int().min(1).max(10_000).optional(),
+  throttleMs: z.coerce.number().int().min(0).max(60_000).optional(),
+  dryRun: z.boolean().optional(),
+  triggeredBy: z.string().trim().min(1).max(120).optional(),
+});
+const verifyMigrationsSchema = z.object({
+  healthUrl: z.string().trim().url().max(300).optional(),
+});
 
 /** Xác thực và ép kiểu dữ liệu đầu vào theo schema Zod */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
@@ -52,7 +91,11 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
  */
 @Controller(R.PREFIX)
 export class DatabaseOpsController {
-  constructor(private readonly db: DatabaseOpsService) {}
+  constructor(
+    private readonly db: DatabaseOpsService,
+    @Optional() private readonly migrationDeploy?: MigrationDeployService,
+    @Optional() private readonly backfillOrchestrator?: BackfillOrchestratorService,
+  ) {}
 
   /** Lấy dữ liệu tổng quan cho trang quản trị vận hành */
   @Public()
@@ -180,6 +223,91 @@ export class DatabaseOpsController {
   public runMigrations(@Body() body?: unknown) {
     parse(confirm('MIGRATE'), body ?? {});
     return this.db.runMigrations();
+  }
+
+  /** Kiểm tra an toàn trước khi triển khai migration (Syntax, Dependency, Checksum, Expand-Contract, Lock Risk). */
+  @Public()
+  @Get(R.MIGRATIONS_PREFLIGHT)
+  public migrationPreflight(@Query('offline') offline?: string) {
+    if (!this.migrationDeploy) {
+      throw new DatabaseValidationException([{ message: 'MigrationDeployService is unavailable' }]);
+    }
+    return this.migrationDeploy.runPreflight({ offline: offline === 'true' });
+  }
+
+  /** Triển khai Migration an toàn (Preflight + Approval/Backup Gate + Dual Lock + Post-Check + History). */
+  @Public()
+  @Post(R.MIGRATIONS_DEPLOY)
+  @HttpCode(HttpStatus.OK)
+  public deployMigrations(@Body() body?: unknown) {
+    if (!this.migrationDeploy) {
+      throw new DatabaseValidationException([{ message: 'MigrationDeployService is unavailable' }]);
+    }
+    const payload = parse(deployMigrationsSchema, body ?? {});
+    return this.migrationDeploy.deployMigrations(payload);
+  }
+
+  /** Chạy kiểm tra hậu kiểm sau migration (Schema, Data, Health). */
+  @Public()
+  @Post(R.MIGRATIONS_VERIFY)
+  @HttpCode(HttpStatus.OK)
+  public verifyMigrations(@Body() body?: unknown) {
+    if (!this.migrationDeploy) {
+      throw new DatabaseValidationException([{ message: 'MigrationDeployService is unavailable' }]);
+    }
+    const payload = parse(verifyMigrationsSchema, body ?? {});
+    return this.migrationDeploy.verifyPostMigration(payload);
+  }
+
+  /** Lịch sử triển khai Migration trên Production/Staging. */
+  @Public()
+  @Get(R.MIGRATIONS_HISTORY)
+  public migrationHistory(@Query() q: Record<string, string>) {
+    if (!this.migrationDeploy) {
+      throw new DatabaseValidationException([{ message: 'MigrationDeployService is unavailable' }]);
+    }
+    const { limit, environment } = parse(historyQuerySchema, q);
+    return this.migrationDeploy.listRolloutHistory({ limit, environment });
+  }
+
+  /** Danh sách Backfill scripts đã đăng ký và tiến độ các job backfill trong Queue. */
+  @Public()
+  @Get(R.BACKFILLS)
+  public listBackfills(@Query('limit') limitRaw?: string) {
+    if (!this.backfillOrchestrator) {
+      throw new DatabaseValidationException([
+        { message: 'BackfillOrchestratorService is unavailable' },
+      ]);
+    }
+    const limit = Math.min(100, Math.max(1, Number(limitRaw) || 30));
+    return this.backfillOrchestrator.getOverview(limit);
+  }
+
+  /** Đẩy tác vụ Backfill dữ liệu lớn vào Queue (`system.heavy`) có theo dõi tiến độ. */
+  @Public()
+  @Post(R.BACKFILLS_RUN)
+  @HttpCode(HttpStatus.OK)
+  public runBackfill(@Body() body?: unknown) {
+    if (!this.backfillOrchestrator) {
+      throw new DatabaseValidationException([
+        { message: 'BackfillOrchestratorService is unavailable' },
+      ]);
+    }
+    const payload = parse(runBackfillSchema, body ?? {});
+    return this.backfillOrchestrator.enqueueOrRunBackfill(payload);
+  }
+
+  /** Yêu cầu hủy tác vụ Backfill đang chờ hoặc đang chạy. */
+  @Public()
+  @Post(R.BACKFILL_CANCEL)
+  @HttpCode(HttpStatus.OK)
+  public cancelBackfill(@Param('id', ParseIntPipe) id: number) {
+    if (!this.backfillOrchestrator) {
+      throw new DatabaseValidationException([
+        { message: 'BackfillOrchestratorService is unavailable' },
+      ]);
+    }
+    return this.backfillOrchestrator.cancelJob(id);
   }
 
   /** Lấy trạng thái và lịch sử backup database */

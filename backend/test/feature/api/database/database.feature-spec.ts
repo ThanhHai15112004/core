@@ -138,7 +138,43 @@ describe('Database Monitor (/ops/database) — không có database', () => {
         'replicationLagWarnMs',
         'replicationLagCritMs',
         'fallbackOnCriticalLag',
+        'migrationLockTimeoutMs',
+        'migrationStatementTimeoutMs',
+        'migrationRequireBackupRisk',
+        'migrationRequireApprovalInProd',
       ]),
     );
+  });
+
+  it('cung cấp preflight, rollout history, backfills và bảo vệ deploy khi chưa kết nối', async () => {
+    const preflight = await call<{
+      report: { mode: string; totalMigrations: number };
+      backupReadiness: { required: boolean; satisfied: boolean };
+    }>('GET', `${base}/migrations/preflight?offline=true`);
+    expect(preflight.status).toBe(200);
+    expect(preflight.body.data.report.mode).toBe('offline');
+    expect(preflight.body.data.report.totalMigrations).toBeGreaterThan(0);
+
+    const history = await call<unknown[]>('GET', `${base}/migrations/history?limit=10`);
+    expect(history.status).toBe(200);
+    expect(Array.isArray(history.body.data)).toBe(true);
+
+    const backfills = await call<{ definitions: { name: string }[]; jobs: unknown[] }>(
+      'GET',
+      `${base}/backfills`,
+    );
+    expect(backfills.status).toBe(200);
+    expect(backfills.body.data.definitions.map((d) => d.name)).toContain(
+      'migration-checksum-backfill',
+    );
+
+    const deployBadConfirm = await call('POST', `${base}/migrations/deploy`, { confirm: 'NOPE' });
+    expect(deployBadConfirm.status).toBe(400);
+
+    const deployDisabled = await call('POST', `${base}/migrations/deploy`, {
+      confirm: 'MIGRATE',
+    });
+    expect(deployDisabled.status).toBe(409);
+    expect(deployDisabled.body.error?.code).toBe('DATABASE_MIGRATIONS_DISABLED');
   });
 });

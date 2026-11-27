@@ -10,6 +10,7 @@ import { MessagingModule } from '@packages/messaging/index.js';
 import { RedisModule } from '@packages/redis/index.js';
 import { RuntimeAgentModule } from '@packages/runtime/index.js';
 import { BackupOpsModule } from '@modules/backup-ops/index.js';
+import { DatabaseDeployModule } from '@modules/database-ops/index.js';
 import { DrOpsModule } from '@modules/dr-ops/index.js';
 
 // CLI Dispatcher & Services
@@ -43,6 +44,7 @@ import { OpenApiCommand } from './commands/architecture/openapi.command.js';
     StorageModule,
     MessagingModule,
     BackupOpsModule,
+    DatabaseDeployModule,
     DrOpsModule,
   ],
   providers: [

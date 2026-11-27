@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { DatabaseDeployModule } from './database-deploy.module.js';
 import { DatabaseOpsController } from './controllers/database-ops.controller.js';
 import { DatabaseOpsService } from './services/database-ops.service.js';
 import { DatabaseMetricsService } from './services/database-metrics.service.js';
@@ -8,6 +9,7 @@ import { DatabaseMonitorService } from './services/database-monitor.service.js';
 
 /** API Database Monitor cho System Console (`/ops/database/*`) + monitor nền (snapshot & cảnh báo). */
 @Module({
+  imports: [DatabaseDeployModule],
   controllers: [DatabaseOpsController],
   providers: [
     DatabaseOpsService,
@@ -15,6 +17,6 @@ import { DatabaseMonitorService } from './services/database-monitor.service.js';
     DatabaseStoreService,
     DatabaseMonitorService,
   ],
-  exports: [DatabaseOpsService],
+  exports: [DatabaseOpsService, DatabaseDeployModule],
 })
 export class DatabaseOpsModule {}

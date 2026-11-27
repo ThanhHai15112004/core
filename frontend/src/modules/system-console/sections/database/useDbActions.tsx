@@ -3,8 +3,9 @@ import { toast } from 'sonner';
 import { useLocale } from '@core/i18n/index';
 import { useAppMutation } from '@core/data';
 import { useFormat } from '@core/hooks/useFormat';
+import { Input, Switch } from '@core/ui/primitives';
 import { CodeBlock, ConfirmDialog, KeyValueGrid } from '@core/ui/blocks';
-import type { DbMigrations, DbSession } from '../../types/database.types';
+import type { DbMigrations, DbSafeMigrateResult, DbSession } from '../../types/database.types';
 import { databaseApi } from '../../services/database.api';
 import { DB_CONFIRM, DB_SQL_MAX_HEIGHT_PX } from '../../constants/database';
 import { sessionSource } from '../../components/database/db-labels';
@@ -17,13 +18,17 @@ type Pending =
   | null;
 
 /**
- * Thao tác database: Huỷ query, Ngắt session (gõ TERMINATE), Chạy migration (gõ MIGRATE).
+ * Thao tác database: Huỷ query, Ngắt session (gõ TERMINATE), Chạy migration an toàn (gõ MIGRATE).
  * Mỗi thao tác qua hộp xác nhận chuẩn; xong thì làm mới mọi số liệu database.
  */
 export function useDbActions() {
   const { t } = useLocale();
   const f = useFormat();
   const [pending, setPending] = useState<Pending>(null);
+  const [releaseVersion, setReleaseVersion] = useState('');
+  const [approvedBy, setApprovedBy] = useState('');
+  const [approvalTicket, setApprovalTicket] = useState('');
+  const [autoBackup, setAutoBackup] = useState(true);
   const close = () => setPending(null);
 
   const cancel = useAppMutation<DbSession>({
@@ -40,14 +45,24 @@ export function useDbActions() {
     error: t('db.action.failed'),
     onSuccess: close,
   });
-  const migrate = useAppMutation<void, DbMigrations['lastRun']>({
-    mutationFn: () => databaseApi.runMigrations(DB_CONFIRM.migrate),
+  const migrate = useAppMutation<void, DbSafeMigrateResult>({
+    mutationFn: () =>
+      databaseApi.deployMigrations({
+        confirm: DB_CONFIRM.migrate,
+        ...(releaseVersion.trim() ? { releaseVersion: releaseVersion.trim() } : {}),
+        ...(approvedBy.trim() ? { approvedBy: approvedBy.trim() } : {}),
+        ...(approvalTicket.trim() ? { approvalTicket: approvalTicket.trim() } : {}),
+        autoBackup,
+      }),
     invalidate: [dbKeys.all],
     success: false,
     error: t('db.migrations.runFailed'),
     onSuccess: (run) => {
-      if (run?.status === 'completed') toast.success(t('db.migrations.done', { count: run.executed.length }));
-      else toast.error(t('db.migrations.runFailed'), { description: run?.error ?? undefined });
+      if (run.status === 'SUCCESS' || run.status === 'NO_OP') {
+        toast.success(t('db.migrations.done', { count: run.executedMigrations.length }));
+      } else {
+        toast.error(t('db.migrations.runFailed'), { description: run.errorMessage ?? undefined });
+      }
       close();
     },
   });
@@ -138,6 +153,36 @@ export function useDbActions() {
             },
           ]}
         />
+        <div className="mt-2 flex flex-col gap-2 text-xs">
+          <label className="flex flex-col gap-1">
+            <span className="text-muted">{t('db.modal.migrate.releaseVersion')}</span>
+            <Input
+              value={releaseVersion}
+              onChange={(e) => setReleaseVersion(e.target.value)}
+              placeholder="1.0.0"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-muted">{t('db.modal.migrate.approvedBy')}</span>
+            <Input
+              value={approvedBy}
+              onChange={(e) => setApprovedBy(e.target.value)}
+              placeholder={t('db.modal.migrate.approvedByPlaceholder')}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-muted">{t('db.modal.migrate.approvalTicket')}</span>
+            <Input
+              value={approvalTicket}
+              onChange={(e) => setApprovalTicket(e.target.value)}
+              placeholder={t('db.modal.migrate.approvalTicketPlaceholder')}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-2 pt-1">
+            <span className="text-muted">{t('db.modal.migrate.autoBackup')}</span>
+            <Switch checked={autoBackup} onCheckedChange={setAutoBackup} />
+          </label>
+        </div>
       </ConfirmDialog>
     );
   })();

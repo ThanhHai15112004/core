@@ -25,6 +25,11 @@ UPSTREAM_FILE="${NGINX_UPSTREAM_FILE:-docker/nginx/upstreams/backend.conf}"
 AUTO_ROLLBACK=true
 DRY_RUN=false
 REQUIRE_DIGEST=false
+RUN_MIGRATIONS=false
+DB_APPROVED_BY="${DB_APPROVED_BY:-}"
+DB_APPROVAL_TICKET="${DB_APPROVAL_TICKET:-}"
+DB_AUTO_BACKUP=false
+DB_LOCK_TIMEOUT_MS="${DB_MIGRATION_LOCK_TIMEOUT_MS:-5000}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -37,6 +42,11 @@ while [ "$#" -gt 0 ]; do
     --namespace) K8S_NAMESPACE="$2"; shift 2 ;;
     --no-auto-rollback) AUTO_ROLLBACK=false; shift ;;
     --require-digest) REQUIRE_DIGEST=true; shift ;;
+    --run-migrations) RUN_MIGRATIONS=true; shift ;;
+    --db-approved-by) DB_APPROVED_BY="$2"; shift 2 ;;
+    --db-approval-ticket) DB_APPROVAL_TICKET="$2"; shift 2 ;;
+    --db-auto-backup) DB_AUTO_BACKUP=true; shift ;;
+    --db-lock-timeout-ms) DB_LOCK_TIMEOUT_MS="$2"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -124,6 +134,31 @@ run_smoke() {
     --report "$report_path" \
     "${extra_flags[@]}"
 }
+
+# 1b. Safe Database Migration (Expand Phase trước khi rollout phiên bản mới)
+if [ "$RUN_MIGRATIONS" = true ]; then
+  MIGRATE_FLAGS=(
+    --env "$ENV_NAME"
+    --release "$APP_VERSION"
+    --commit "$APP_GIT_COMMIT"
+    --target "$TARGET"
+    --namespace "$K8S_NAMESPACE"
+    --lock-timeout-ms "$DB_LOCK_TIMEOUT_MS"
+  )
+  if [ -n "$DB_APPROVED_BY" ]; then
+    MIGRATE_FLAGS+=(--approved-by "$DB_APPROVED_BY")
+  fi
+  if [ -n "$DB_APPROVAL_TICKET" ]; then
+    MIGRATE_FLAGS+=(--ticket "$DB_APPROVAL_TICKET")
+  fi
+  if [ "$DB_AUTO_BACKUP" = true ]; then
+    MIGRATE_FLAGS+=(--auto-backup)
+  fi
+  if [ "$DRY_RUN" = true ]; then
+    MIGRATE_FLAGS+=(--dry-run)
+  fi
+  bash scripts/deploy/migrate-db.sh "${MIGRATE_FLAGS[@]}"
+fi
 
 # 2. Thực thi triển khai theo Target & Strategy (không build lại image)
 if [ "$TARGET" = "k8s" ]; then

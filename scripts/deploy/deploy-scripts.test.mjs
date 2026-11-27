@@ -346,3 +346,14 @@ test('build-release.sh: prints 1-command build-once plan in dry-run mode', () =>
   assert.match(out, /ghcr\.io\/org\/core\/core-nginx:/);
   assert.match(out, /DRY-RUN hoàn tất/);
 });
+
+test('migrate-db.sh: passes bash syntax and runs offline preflight in dry-run mode', () => {
+  const migrateScript = path.join(REPO_ROOT, 'scripts/deploy/migrate-db.sh');
+  execFileSync('bash', ['-n', migrateScript], { cwd: REPO_ROOT });
+  execFileSync('bash', ['-n', path.join(REPO_ROOT, 'scripts/deploy/deploy.sh')], { cwd: REPO_ROOT });
+
+  const scriptText = fs.readFileSync(migrateScript, 'utf8');
+  assert.match(scriptText, /migration:preflight/);
+  assert.match(scriptText, /migration:deploy/);
+  assert.match(scriptText, /migration:verify/);
+});

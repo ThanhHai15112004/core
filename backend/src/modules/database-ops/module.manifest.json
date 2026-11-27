@@ -8,11 +8,11 @@
   "category": "operations",
   "author": "Core Platform Team",
   "entryModule": "DatabaseOpsModule",
-  "dependencies": ["database", "redis", "runtime", "config"],
+  "dependencies": ["database", "redis", "runtime", "config", "backup-ops", "messaging"],
   "permissions": [],
   "events": {},
   "database": {
-    "hasMigrations": false,
-    "tables": []
+    "hasMigrations": true,
+    "tables": ["db_migration_rollouts", "db_backfill_jobs"]
   }
 }

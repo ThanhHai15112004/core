@@ -114,6 +114,14 @@ backend-test:
       JWT_REFRESH_SECRET=ci_test_refresh_secret_key_at_least_32_characters_long
       JWT_ACCESS_EXPIRATION=15m JWT_REFRESH_EXPIRATION=7d
       npm run cli -- arch:check --report ../reports/arch-report.json
+    - >
+      APP_NAME=core-ci NODE_ENV=test HOST=127.0.0.1 PORT=3005 API_PREFIX=api/v1
+      DB_ENABLED=false REDIS_HOST=127.0.0.1 REDIS_PORT=1 REDIS_PREFIX=core_ci:
+      STORAGE_DRIVER=local
+      JWT_ACCESS_SECRET=ci_test_access_secret_key_at_least_32_characters_long
+      JWT_REFRESH_SECRET=ci_test_refresh_secret_key_at_least_32_characters_long
+      JWT_ACCESS_EXPIRATION=15m JWT_REFRESH_EXPIRATION=7d
+      npm run cli -- migration:preflight --offline --since=1764300000000 --json > ../reports/migration-preflight-report.json
     - cd ..
     - >
       APP_NAME=core-ci NODE_ENV=test HOST=127.0.0.1 PORT=3005 API_PREFIX=api/v1
@@ -234,7 +242,9 @@ backend-integration-api-test:
     - cd backend
     - npm ci
     - npm run build
+    - npm run cli -- migration:preflight
     - npm run cli -- migration:check --run
+    - npm run cli -- migration:verify
     - npm run cli -- seed:run
     - npm run cli -- seed:run
     - NODE_ENV=test OPS_DATABASE_MIGRATIONS_ENABLED=false TEST_USE_REAL_INFRA=true NODE_OPTIONS="--experimental-vm-modules --max-old-space-size=4096" npx jest --testPathPattern="live-db-redis-api\.integration-spec\.ts" --runInBand --forceExit --json --outputFile=../reports/jest-live-results.json

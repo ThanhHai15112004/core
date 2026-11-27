@@ -1,8 +1,11 @@
-import crypto from 'node:crypto';
 import type { EntityManager } from 'typeorm';
 import { CoreConfigService } from '@packages/config/index.js';
-import type { DataRepairContract, DataRepairExecutionResult } from '@packages/database/index.js';
-import { databaseKeys } from '@packages/database/index.js';
+import {
+  computeMigrationChecksum,
+  databaseKeys,
+  type DataRepairContract,
+  type DataRepairExecutionResult,
+} from '@packages/database/index.js';
 import { RedisService } from '@packages/redis/index.js';
 
 /**
@@ -44,8 +47,7 @@ export class MigrationChecksumRepairScript implements DataRepairContract {
     const codeByName = new Map<string, string>();
     for (const m of migrations) {
       const mName = m.name ?? m.constructor.name;
-      const rawSource = `${mName}:${m.up.toString()}:${m.down.toString()}`;
-      const checksum = crypto.createHash('sha256').update(rawSource).digest('hex');
+      const checksum = computeMigrationChecksum(m);
       codeByName.set(mName, checksum);
     }
 

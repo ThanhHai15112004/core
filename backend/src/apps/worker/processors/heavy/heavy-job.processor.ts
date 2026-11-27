@@ -46,6 +46,10 @@ import {
   SEARCH_PUBLIC_SERVICE,
   type ISearchPublicService,
 } from '@modules/search/contracts/index.js';
+import {
+  BackfillOrchestratorService,
+  DATABASE_BACKFILL_TOPIC,
+} from '@modules/database-ops/index.js';
 import { BaseQueueProcessor } from '../base-queue.processor.js';
 
 interface UserImportWorkerPort {
@@ -119,6 +123,7 @@ export interface HeavyQueueJobPayload {
     | 'search_rebuild'
     | 'media_process'
     | 'trash_cleanup'
+    | 'database_backfill'
     | string;
   readonly executeInWorker?: boolean;
   readonly totalItems?: number;
@@ -147,6 +152,8 @@ export interface HeavyQueueJobPayload {
   readonly notifyOnComplete?: boolean;
   readonly fileId?: number | string | null;
   readonly format?: 'csv' | 'xlsx' | 'pdf' | string;
+  readonly backfillJobId?: number;
+  readonly jobName?: string;
 }
 
 const HEAVY_JOB_PHASES = ['Validate Input', 'Process Items', 'Finalize Output'] as const;
@@ -198,6 +205,7 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     @Optional()
     @Inject(SEARCH_PUBLIC_SERVICE)
     private readonly searchService?: ISearchPublicService,
+    @Optional() private readonly backfillOrchestrator?: BackfillOrchestratorService,
   ) {
     super(config, metrics, progressTracker);
     this.ensureInjectedWorkerExecutorsRegistered();
@@ -449,6 +457,10 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
 
     if (this.canExecuteTrashCleanup(envelope.topic, operation, payload)) {
       return this.handleTrashCleanup(job, total);
+    }
+
+    if (this.canExecuteDatabaseBackfill(envelope.topic, operation, payload)) {
+      return this.handleDatabaseBackfill(job, payload);
     }
 
     return this.handleChunkedProgress(envelope.topic, job, total, chunkSize);
@@ -788,6 +800,40 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
     };
   }
 
+  /** 4.5. Xử lý topic `database.backfill` — Chạy backfill dữ liệu lớn theo batch + cursor checkpoint */
+  private async handleDatabaseBackfill(
+    job: Job,
+    payload: HeavyQueueJobPayload,
+  ): Promise<HeavyHandlerResult> {
+    const backfillJobId = Number(payload.backfillJobId);
+    const result = await this.backfillOrchestrator!.executeJobById(backfillJobId, async (snap) => {
+      const effectiveTotal = Math.max(1, snap.totalRows ?? snap.processedRows ?? 1);
+      await this.reportProcessingStep(
+        job,
+        snap.processedRows,
+        effectiveTotal,
+        `Backfill ${payload.jobName ?? `#${backfillJobId}`}: ${snap.processedRows} rows (${snap.percent}%)`,
+        {
+          successCount: snap.processedRows,
+        },
+      );
+    });
+
+    const finalTotal = Math.max(1, result.totalRows ?? result.processedRows);
+    return {
+      processed: result.processedRows,
+      total: finalTotal,
+      extra: {
+        backfillJobId,
+        jobName: result.name,
+        backfillStatus: result.status,
+        updatedRows: result.updatedRows,
+        lastCursor: result.lastCursor,
+        batchesExecuted: result.batchesExecuted,
+      },
+    };
+  }
+
   /** 5. Xử lý mặc định theo từng chunk (Export hoặc job chỉ ghi nhận tiến độ) */
   private async handleChunkedProgress(
     topic: string,
@@ -960,6 +1006,20 @@ export class HeavyJobProcessor extends BaseQueueProcessor {
       (operation === 'trash_cleanup' || topic === 'files.trash_cleanup') &&
       Boolean(this.filesService) &&
       payload.executeInWorker !== false
+    );
+  }
+
+  /** Kiểm tra điều kiện chạy Database Backfill qua Queue */
+  private canExecuteDatabaseBackfill(
+    topic: string,
+    operation: string,
+    payload: HeavyQueueJobPayload,
+  ): boolean {
+    return (
+      (operation === 'database_backfill' || topic === DATABASE_BACKFILL_TOPIC) &&
+      Boolean(this.backfillOrchestrator) &&
+      Number.isInteger(Number(payload.backfillJobId)) &&
+      Number(payload.backfillJobId) > 0
     );
   }
 

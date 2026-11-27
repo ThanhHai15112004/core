@@ -1,6 +1,8 @@
 import { fetchApi } from '../../../core/services/api';
 import { API_ROUTES } from '../../../routes/index';
 import type {
+  DbBackfillJob,
+  DbBackfillOverview,
   DbBackupSummary,
   DbConfig,
   DbConnectionDetail,
@@ -10,13 +12,18 @@ import type {
   DbExplain,
   DbMetric,
   DbMetrics,
+  DbMigrationPreflightSummary,
+  DbMigrationRolloutHistory,
   DbMigrations,
   DbOverview,
   DbPing,
+  DbPostMigrationVerificationReport,
   DbQueryDetail,
   DbQueryStat,
   DbRange,
   DbReplicationOverview,
+  DbSafeMigratePayload,
+  DbSafeMigrateResult,
   DbSession,
   DbSlowQueries,
   DbStorage,
@@ -51,6 +58,30 @@ export const databaseApi = {
   storage: () => fetchApi<DbStorage>(D('storage')),
   migrations: () => fetchApi<DbMigrations>(D('migrations')),
   runMigrations: (confirm: string) => post<DbMigrations['lastRun']>('migrations/run', confirm),
+  migrationPreflight: () => fetchApi<DbMigrationPreflightSummary>(D('migrations/preflight')),
+  migrationHistory: (limit = 20) =>
+    fetchApi<DbMigrationRolloutHistory[]>(D('migrations/history', toQuery({ limit }))),
+  deployMigrations: (payload: DbSafeMigratePayload) =>
+    fetchApi<DbSafeMigrateResult>(D('migrations/deploy'), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  verifyMigrations: () =>
+    fetchApi<DbPostMigrationVerificationReport>(D('migrations/verify'), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+  backfills: () => fetchApi<DbBackfillOverview>(D('backfills')),
+  runBackfill: (payload: { jobName: string; dryRun?: boolean }) =>
+    fetchApi<{ job: DbBackfillJob; executionMode: 'queue' | 'inline' }>(D('backfills/run'), {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  cancelBackfill: (id: number) =>
+    fetchApi<DbBackfillJob>(D(`backfills/${id}/cancel`), {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
   backup: () => fetchApi<DbBackupSummary>(D('backup')),
   events: (range: DbRange) => fetchApi<DbEvent[]>(D('events', toQuery({ range }))),
   errors: (range: DbRange) => fetchApi<DbErrors>(D('errors', toQuery({ range }))),

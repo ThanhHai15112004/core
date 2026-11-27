@@ -13,6 +13,9 @@ import type { DbMigrations, DbOverview, DbTable } from '../../types/database.typ
 import { databaseApi } from '../../services/database.api';
 import { DB_TABLE_MAX_HEIGHT_PX, DB_TABLE_VIEWS, STORAGE_USAGE_THRESHOLDS } from '../../constants/database';
 import { dateTime } from '../../components/database/db-labels';
+import { MigrationPreflightPanel } from '../../components/database/MigrationPreflightPanel';
+import { MigrationHistoryPanel } from '../../components/database/MigrationHistoryPanel';
+import { BackfillJobsPanel } from '../../components/database/BackfillJobsPanel';
 import { DbCapabilityGate, DbViewSwitch } from './DbViewSwitch';
 import { dbKeys } from './database-keys';
 import type { DatabasePage } from './useDatabasePage';
@@ -259,6 +262,8 @@ function MigrationsView({ actions }: { actions: DbActions }) {
         </QueryView>
       </Panel>
 
+      <MigrationPreflightPanel />
+
       {d && d.pending > 0 && d.environment === 'production' && <StatusBanner tone="warn" title={t('db.migrations.pendingProd', { count: d.pending })} />}
       {failed && <StatusBanner tone="crit" title={t('db.migrations.lastFailedTitle')} description={d?.lastRun?.error ?? undefined} />}
 
@@ -309,6 +314,9 @@ function MigrationsView({ actions }: { actions: DbActions }) {
           )}
         </QueryView>
       </Panel>
+
+      <MigrationHistoryPanel />
+      <BackfillJobsPanel />
     </>
   );
 }

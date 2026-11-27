@@ -157,6 +157,22 @@ export const databaseConfig = () => {
     },
     /** Chặn chạy migration nếu phát hiện migration đã áp dụng bị sửa đổi hoặc xóa file. */
     migrationStrict: booleanOr('DB_MIGRATION_STRICT', true),
+    /** Thời gian chờ khóa bảng tối đa khi chạy từng migration (ms). */
+    migrationLockTimeoutMs: Math.max(500, numberOr('DB_MIGRATION_LOCK_TIMEOUT_MS', 5_000)),
+    /** Thời gian chạy tối đa cho mỗi câu lệnh DDL/DML trong migration (ms, 0 = không giới hạn). */
+    migrationStatementTimeoutMs: Math.max(0, numberOr('DB_MIGRATION_STATEMENT_TIMEOUT_MS', 60_000)),
+    /** Thời gian giữ distributed lock migration trên Redis (giây). */
+    migrationLockTtlSec: Math.max(30, numberOr('DB_MIGRATION_LOCK_TTL_SEC', 600)),
+    /** Ngưỡng cảnh báo thời lượng thực thi/giữ khóa của một migration (ms). */
+    migrationMaxLockWarnMs: Math.max(500, numberOr('DB_MIGRATION_MAX_LOCK_WARN_MS', 3_000)),
+    /** Ngưỡng rủi ro tối thiểu bắt buộc phải có backup xác thực trước khi chạy migration (LOW|MEDIUM|HIGH|CRITICAL|NEVER). */
+    migrationRequireBackupRisk: (
+      env('DB_MIGRATION_REQUIRE_BACKUP_RISK', false) || 'HIGH'
+    ).toUpperCase() as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | 'NEVER',
+    /** Tuổi tối đa (giờ) của bản backup hợp lệ trước khi chạy migration rủi ro. */
+    migrationBackupMaxAgeHours: Math.max(1, numberOr('DB_MIGRATION_BACKUP_MAX_AGE_HOURS', 24)),
+    /** Bắt buộc có người phê duyệt (`approvedBy`) khi triển khai migration trên môi trường Production. */
+    migrationRequireApprovalInProd: booleanOr('DB_MIGRATION_REQUIRE_APPROVAL_IN_PROD', true),
     /** Dung lượng tối đa cấp cho database (GB) để tính % sử dụng; 0 = không biết. */
     storageLimitGb: numberOr('DB_STORAGE_LIMIT_GB', 0),
     storageWarnPercent: numberOr('DB_STORAGE_WARN_PERCENT', 80),

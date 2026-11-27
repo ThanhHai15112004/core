@@ -6,6 +6,10 @@ import { DatabaseManageableAdapter } from './providers/database-manageable.adapt
 import { DatabaseConnectionService } from './providers/database-connection.service.js';
 import { DatabaseMonitoringService } from './monitoring/database-monitoring.service.js';
 import { DatabaseOperationsService } from './operations/database-operations.service.js';
+import { MigrationLockService } from './migrations/migration-lock.service.js';
+import { MigrationPreflightService } from './migrations/migration-preflight.service.js';
+import { PostMigrationVerifierService } from './migrations/post-migration-verifier.service.js';
+import { DataBackfillRunnerService } from './backfill/data-backfill-runner.service.js';
 import { TransactionManager } from './transaction/transaction-manager.service.js';
 import { UNIT_OF_WORK } from './transaction/unit-of-work.contract.js';
 import { DatabaseSeederService } from './seeding/database-seeder.service.js';
@@ -23,7 +27,11 @@ import { DatabaseRoutingService } from './routing/database-routing.service.js';
     TypeOrmConfigService,
     DatabaseConnectionService,
     DatabaseMonitoringService,
+    MigrationLockService,
+    MigrationPreflightService,
     DatabaseOperationsService,
+    PostMigrationVerifierService,
+    DataBackfillRunnerService,
     DatabaseRoutingService,
     TransactionManager,
     {
@@ -39,7 +47,11 @@ import { DatabaseRoutingService } from './routing/database-routing.service.js';
     TypeOrmConfigService,
     DatabaseConnectionService,
     DatabaseMonitoringService,
+    MigrationLockService,
+    MigrationPreflightService,
     DatabaseOperationsService,
+    PostMigrationVerifierService,
+    DataBackfillRunnerService,
     DatabaseRoutingService,
     TransactionManager,
     UNIT_OF_WORK,

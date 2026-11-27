@@ -36,6 +36,7 @@ import { IdempotencyModule } from '@modules/idempotency/index.js';
 import { PaymentsModule } from '@modules/payments/index.js';
 import { ReconciliationModule } from '@modules/reconciliation/index.js';
 import { BackupOpsModule } from '@modules/backup-ops/index.js';
+import { DatabaseDeployModule } from '@modules/database-ops/index.js';
 import { DrOpsModule } from '@modules/dr-ops/index.js';
 import { PrivilegedAccessModule } from '@modules/privileged-access/index.js';
 import { DataGovernanceModule } from '@modules/data-governance/index.js';
@@ -88,6 +89,7 @@ const PROCESSORS = [SystemProcessor, CriticalProcessor, NotificationsProcessor, 
     PaymentsModule,
     ReconciliationModule,
     BackupOpsModule,
+    DatabaseDeployModule,
     DrOpsModule,
     PrivilegedAccessModule,
     DataGovernanceModule,
