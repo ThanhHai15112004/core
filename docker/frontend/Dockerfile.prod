@@ -11,12 +11,12 @@ COPY frontend/tsconfig*.json ./
 COPY frontend/vite.config.ts ./
 COPY frontend/index.html ./
 
-# Cài đặt dependencies phục vụ build
-RUN npm install
+# Cài đặt dependencies phục vụ build bằng lockfile cố định
+RUN npm ci
 
 # Copy mã nguồn frontend
 COPY frontend/src ./src
-COPY frontend/public ./public 2>/dev/null || true
+COPY frontend/public ./public
 
 # Nhận biến API URL lúc build (mặc định trỏ về /api/v1 tương đối qua Nginx)
 ARG VITE_API_BASE_URL=/api/v1

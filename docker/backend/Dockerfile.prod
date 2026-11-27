@@ -9,8 +9,8 @@ WORKDIR /app
 COPY backend/package*.json backend/project.manifest.json ./
 COPY backend/tsconfig*.json ./
 
-# Cài đặt đầy đủ dependencies phục vụ biên dịch
-RUN npm install
+# Cài đặt đầy đủ dependencies phục vụ biên dịch bằng lockfile cố định
+RUN npm ci
 
 # Copy toàn bộ mã nguồn backend và tiến hành build
 COPY backend/src ./src
@@ -32,9 +32,9 @@ ENV NODE_ENV=production \
     APP_IMAGE=${APP_IMAGE} \
     APP_BUILD_TIME=${APP_BUILD_TIME}
 
-# Chỉ cài production dependencies
+# Chỉ cài production dependencies bằng lockfile cố định
 COPY backend/package*.json backend/project.manifest.json ./
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy mã nguồn đã build từ Stage 1
 COPY --from=builder /app/dist ./dist
