@@ -1,5 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
+import { testEnvFixture } from './fixtures/env.fixture.js';
 
 /**
  * Chạy trước mọi file test (trước khi `.env.test` được nạp — loader không ghi đè biến đã có):
@@ -14,3 +15,13 @@ process.env['STORAGE_LOCAL_PATH'] ??= path.join(os.tmpdir(), `core-test-storage-
  */
 process.env['REDIS_PORT'] ??= '1';
 process.env['OPS_DATABASE_MIGRATIONS_ENABLED'] ??= 'false';
+
+/**
+ * Bảo đảm mọi runner CI sạch (không có tệp `.env` / `.env.test` trong git) luôn có đủ biến môi trường
+ * kiểm thử tối thiểu mà không ghi đè biến đã truyền từ CI (như `REDIS_PORT=6379` của live integration test).
+ */
+for (const [key, value] of Object.entries(testEnvFixture)) {
+  if (value !== '') {
+    process.env[key] ??= value;
+  }
+}
